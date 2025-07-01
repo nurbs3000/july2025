@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Flocking basics</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            #wrapper{ /* ID selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexible layout box model. */
+                flex-direction: column; /* Stack children vertically. */
+            }
+            header{ /* Type selector. */
+                width: 100%; /* 100% of parent's width. */
+                height: 70px; /* Fixed height. */
+                display: flex; /* Flexible box layout model. */
+                justify-content: space-evenly; /* distribute space evenly between items along main axis. */
+                align-items: center; /* center along cross axis. */
+                font-family: Arial; /* font. */
+                background-color: #f0f0f0; /* your choise. */
+            }
+            figure{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 100%; /* 100% of the remaining free height (100vh-70px). */
+                background-color: black;
+                position: relative; /* for absolute positioning of children. */
+            }
+            canvas{ /* Type selector. Will do, since there is only 1 canvas. */
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <header> <!-- Semantic element. Contain all control elements. -->
+                <div>Boid Qt. <!-- Boid quiantity control. -->
+                    <br>
+                    <input type="number" class="boid-qt" min="1" max="500" value="300" autocomplete="off">
+                </div>
+                <div style="min-width:190px;">Max velocity: <span class="max-vel"></span>px/frame <!-- Max velocity control. -->
+                    <br>
+                    <input type="range" class="max-vel" min=".1" max="3" step=".1" value="2" autocomplete="off">
+                </div>
+                <div style="min-width:190px;">Perception radius: <span class="perception-radius"></span>px <!-- Perception radius.-->
+                    <br>
+                    <input type="range" class="perception-radius" min="50" max="900" value="600" autocomplete="off">
+                </div>
+                <div>Separation. <!-- Separation force control. -->
+                    <br>
+                    <input type="number" class="separation" min="0" max="10" step=".1" value="1" autocomplete="off">
+                </div>
+                <div>Alignment. <!-- Alignment force control. -->
+                    <br>
+                    <input type="number" class="alignment" min="0" max="10" step=".1"value="1" autocomplete="off">
+                </div>
+                <div>Cohesion. <!-- Cohesion force control. -->
+                    <br>
+                    <input type="number" class="cohesion" min="0" max="10" step=".1" value="1" autocomplete="off">
+                </div>
+            </header>
+            <figure> <!-- Canvas container. -->
+                <canvas></canvas> <!-- I bet you know what it is. -->
+            </figure>
+        </div>
+        <script> // Embedded 
+//*************************** global variables **********************
+const figureElem = document.querySelector("figure"); // reference to figure.
+const canvasElem = document.querySelector("canvas"); // reference to canvas.
+const ctx = canvasElem.getContext("2d"); // Canvas 2d rendering context.
+const boids = []; // Array to store boid instances.
+const inputs = {boidRadius: 5, clearOpacity: .07}; // Simulation parameters.
+
+//*************************** events ********************************
+document.querySelector("header").addEventListener("input",handleInputs); // Handle all input events from control elements.
+
+//*************************** logic *********************************
+class Boid{ // JavaScript Class.
+    static W = canvasElem.width; // Static field for class. Defined on class itself.
+    static H = canvasElem.height;
+    constructor(){ // Special contructor method of the class. Called by new keyword.
+        this.x = Math.random()*Boid.W; //Random initial position.
+        this.y = Math.random()*Boid.H;
+        this.xVel = (Math.random()*2-1)*inputs.maxVel; // Random initial velocity within range.
+        this.yVel = (Math.random()*2-1)*inputs.maxVel;
+        this.radius = inputs.boidRadius; // radius of circe representin boid.
+        this.color = `hsl(${360*Math.random() | 0},100%,50%)`; // Random HSL color.
+    }
+    update(){ // Update boid position and velocity. 'this' refers to the boid that called this method via dot notation.
+        const neighbors = []; // Array to store boids within perceptionRadius.
+        boids.forEach(boid=>{ // Iterates over each boid in the array boids.
+            if(boid === this) return; // Skip self.
+            const [dx,dy] = [boid.x-this.x,boid.y-this.y]; // Desctucturing syntax. x,y distances between current boid and the boid that called that method.
+            const dist = Math.sqrt(dx*dx+dy*dy); // Pythagorean theorem in action.
+            if(dist < inputs.perceptionRadius) //  If within range.
+                neighbors.push(boid); // Add to neighbors.
+        });
+        if(neighbors.length){ // Apply flocking rules if neighbors exist. Calculate separation, alignment, cohesion. Apply weighted forces to velocity.
+            const separation = this.separation(neighbors);
+            const alignment = this.alignment(neighbors);
+            const cohesion = this.cohesion(neighbors);
+            this.xVel += separation.x*inputs.separation + alignment.x*inputs.alignment + cohesion.x*inputs.cohesion;
+            this.yVel += separation.y*inputs.separation + alignment.y*inputs.alignment + cohesion.y*inputs.cohesion;
+        }
+        const velocity = Math.sqrt(this.xVel**2+this.yVel**2); // Pythagorean theorem again.
+        if(velocity > inputs.maxVel){ // Limit maximum velocity.
+            this.xVel = this.xVel/velocity*inputs.maxVel;
+            this.yVel = this.yVel/velocity*inputs.maxVel;
+        }
+        if(velocity < inputs.maxVel/2){ // Prevent boids from getting stuck an low speeds.
+            this.xVel = inputs.maxVel/2*Math.sign(this.xVel);
+            this.yVel = inputs.maxVel/2*Math.sign(this.yVel);
+        }
+        this.x += this.xVel; // Update positon.
+        this.y += this.yVel;
+
+    const margin = 10; // Set margin to wrap around screen edges nicely.
+    if(this.x > Boid.W+margin) this.x = -margin;
+    if(this.x < -margin) this.x = Boid.W + margin;
+    if(this.y > Boid.H+margin) this.y = -margin;
+    if(this.y < -margin) this.y = Boid.H + margin;
+    }
+    separation(neighbors){ // Force to avoid crowding.
+        const away = {x:0, y:0};
+        neighbors.forEach(boid=>{
+            const [dx,dy] = [this.x-boid.x,this.y-boid.y]; // vector away from neighbor.
+            const dist = Math.sqrt(dx*dx+dy*dy); // Pyth. theorem.
+            away.x += dx/dist; // Normalize and accumulate. Closer boids have stronger influence.
+            away.y += dy/dist;
+        });
+        return {x: away.x/300, y: away.y/300}; // Scale down force (empirical scale factor /300).
+    }
+    alignment(neighbors){ // Forse toward average heading of neighbors. Logic is similar to 'separation' only for velocity.
+        const avgVel = {x:0, y:0};
+        neighbors.forEach(boid=>{
+            avgVel.x += boid.xVel;
+            avgVel.y += boid.yVel;
+        });
+        avgVel.x /= neighbors.length;
+        avgVel.y /= neighbors.length;
+        return {x: (avgVel.x-this.xVel)*.005, y: (avgVel.y-this.yVel)*.005};
+    }
+    cohesion(neighbors){ // Forse toward avarege position of neigbors (center of mass).
+        const avgPos = {x:0, y:0};
+        neighbors.forEach(boid=>{
+            avgPos.x += boid.x;
+            avgPos.y += boid.y;
+        });
+        avgPos.x /= neighbors.length;
+        avgPos.y /= neighbors.length;
+        return {x: (avgPos.x-this.x)*.007, y: (avgPos.y-this.y)*.007};
+    }
+    render(){ // Draw a colored circle representing boid.
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x,this.y,this.radius,0,2*Math.PI);
+        ctx.fill();
+    }
+};
+function handleInputs(){ // Update all values in 'inputs' object. 'inputs' object keys correspond to class names of respective input elements.(only need to convert from kebab case to camel case).
+    ["boid-qt","max-vel","perception-radius","separation","alignment","cohesion"].forEach(selector=>{ 
+        let elem = document.querySelector("input."+selector); // Construct compound selector 'type.className'.
+        const key = selector.replace(/-(\w)/g,(_,l)=>l.toUpperCase()); // From kebab-case to camelCase.
+        inputs[key] = +elem.value; // + is for type conversion (string → number).
+        if(elem.type === "range") // Only sliders have <span> labels.
+            document.querySelector("span."+selector).textContent = inputs[key];
+    });
+    while(inputs.boidQt > boids.length) // Loop to create class Boid intances and add boids to array.
+        boids.push(new Boid());
+    while(inputs.boidQt < boids.length) // Remove boids. 
+        boids.pop();
+}
+function animate(){ // Animation loop.
+    ctx.fillStyle = `rgba(0,0,0,${inputs.clearOpacity})`; // Semi-transparent color for clearing canvas. Trail effect.
+    ctx.fillRect(0,0,canvasElem.width,canvasElem.height);
+    boids.forEach(boid=>{ // Loops through each boid.
+        boid.update(); // call method update() on object boid (dot notation expicitly set this inside that method to 'boid').
+        boid.render();
+    });
+    requestAnimationFrame(animate); // loops animnation.
+}
+
+//*************************** initialization ************************
+onload = ()=>{ // Event is fired when page is loaded.
+    [canvasElem.width,canvasElem.height] = [figureElem.offsetWidth,figureElem.offsetHeight]; // Destructuring syntax. Set canvas dimensions.
+    Boid.W = canvasElem.width; // Set static fields in Boid classs.
+    Boid.H = canvasElem.height;
+    handleInputs(); // To initialize 'inputs' object, and display sliders default values in 'header'.
+    requestAnimationFrame(animate); // Launch the simulation.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
