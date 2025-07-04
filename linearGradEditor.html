@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Linear Gradient Editor</title>
+        <style> /* Internal CSS style. */
+            *{ /* Universal selector. */
+                padding: 0; /* Remove default padding. */
+                margin: 0; /* Remove default margin. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+                font: 20px Arial; /* Default font settings. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexible box layout model. */
+                flex-direction: column; /* Vertical stacking. */
+            }
+            header{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 100px; /* Fixed height. */
+                background-color: lightSlateGray; /* Your choise. */
+                position: relative; /* For absolute positioning of children. */
+            }
+            canvas{ /* Type selector. */
+                position: absolute;
+            }
+            nav{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 50px; /* Fixed height. */
+                background-color: slateGray; /* Your choise. */
+                display: flex; /* Flexible layout box model. */
+                justify-content: space-evenly; /* evenly spaced items. */
+                align-items: center; /* Centered vertically. */
+            }
+            main{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: calc(100vh - 100px - 50px - 80px); /* Calculate height: vieport-header-nav-footer. */
+            }
+            footer{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 80px; /* Fixed height. */
+                padding: 5px 10px; /* Some breathing space. */
+                background-color: slateGray; /* Or whatever color. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <header> <!-- Container for canvas. -->
+                <canvas></canvas> <!-- For gradient and stop color controls(trianlges) visualization. -->
+            </header>
+            <nav> <!-- Contain control elements. -->
+                <div>
+                    <span id="angle">180</span>deg<br>
+                    <input type="range" min="0" max="360" value="180" autocomplete="off" style="min-width:50vw;">
+                </div>
+                <input type="color" value="#ff0000" autocomplete="off">
+                <button id="copy">Copy to Clipboard</button>
+                <button id="del">Del.</button>
+            </nav>
+            <main></main> <!-- Display area for gradient preview. -->
+            <footer></footer> <!-- Footer for CSS code display. -->
+        </div>
+        <script>
+//*************************** global variables **********************
+const headerElem = document.querySelector("header"); // DOM elements references.
+const mainElem = document.querySelector("main");
+const footerElem = document.querySelector("footer");
+const inputColorElem = document.querySelector("input[type='color']");
+const inputRangeElem = document.querySelector("input[type='range']");
+const cEl = document.querySelector("canvas");
+const ctx = cEl.getContext("2d"); // Canvas 2d rendering context.
+const colorStops = [ // Array containing objects representin color stops + 2 flags for hover/selection logic. Initial colors are red and yellow.
+    {pos: 0, color: "#ff0000", hover: false, selected: false},
+    {pos: 1, color: "#ffff00", hover: false, selected: false}
+];
+let draggedIdx = -1; // Index of currenly selected dragged color stop (-1 means none).
+const cPaddingLeft = 50, cPaddingTop = 25; // Canvas padding(not CSS), to give space for triangles.
+
+//*************************** events ********************************
+cEl.addEventListener("click",handleMouseOnCanvas); // 5 events required for interaction on canvas.
+cEl.addEventListener("mousedown",handleMouseOnCanvas);
+cEl.addEventListener("mouseup",handleMouseOnCanvas);
+cEl.addEventListener("mousemove",handleMouseOnCanvas);
+cEl.addEventListener("mouseleave",handleMouseOnCanvas);
+document.querySelector("nav").addEventListener("change",angleAndColor); // event to control slider and color picker.
+document.querySelector("#copy").addEventListener("click",copyToClipboard); // self evident.
+document.querySelector("#del").addEventListener("click",deleteColorStop); // delete selected stop color.
+
+//*************************** logic *********************************
+function handleMouseOnCanvas(e){ // Handler all mouse events on canvas.
+    const m = localMouseCoord(e,cEl); // Get mouse coordinates relative to canvas.
+    const hoverIdx = colorStops.findIndex(obj=>obj.hover); // Previous(updated in previous mouse events) hovered color stop index.
+    const newHoverIdx = mouseOverIdx(e); // Currently(according to the mouse positioin at the moment) hovered color stop index.
+    const selectedIdx = colorStops.findIndex(obj=>obj.selected); // Index of the selected element.
+    switch(e.type){ // Switch hanlde differenct mouse event types.
+        case "click": // Adds new color stop.
+            if(isMouseOverGrad(e)){ // Check if mouse is within gradien area on canvas.
+                const pixel =ctx.getImageData(m.x,m.y,1,1).data; // Get pixel color at click position.
+                const hexColor = rgbToHex(pixel[0],pixel[1],pixel[2]); // Convert RGB to hexadecimal color.
+                colorStops.push({ // push in array object literal.
+                    pos: (m.x-cPaddingLeft)/(cEl.width-2*cPaddingLeft), // Normalized (in range 0-1) position of mouse within gradient area. 
+                    color: hexColor, 
+                    hover: false, // Initially not hovered and not selected.
+                    selected: false
+                });
+                inputColorElem.value = hexColor; // Update color picker.
+            }
+            if(hoverIdx !== -1){ // If we are over some stop color.
+                if(selectedIdx !== -1){ // If there is some stop color selectes.
+                    colorStops[selectedIdx].selected = false; // deselect it.
+                }
+                colorStops[newHoverIdx].selected = true; // Select clicked stop color(click on triangle).
+            }
+            break;
+        case "mousedown":
+            if(hoverIdx !== -1){ // The same logic as for click + set global variable draggedIdx;
+                if(selectedIdx !== -1)
+                    colorStops[selectedIdx].selected = false;
+                colorStops[newHoverIdx].selected = true;
+                draggedIdx = hoverIdx;
+            }
+            break;
+        case "mouseup": // When mouse button released or mouse leave canvas - stop dragging.
+        case "mouseleave":
+            draggedIdx = -1;
+            break;
+        case "mousemove":
+            if(hoverIdx !== newHoverIdx && hoverIdx !== -1){ // If mouse leave stop color(trianles) - set its hover flag to false.
+                colorStops[hoverIdx].hover = false;
+            }
+            if(newHoverIdx !== -1){ // If mouse over some stop color(triangles) set its hover flag to true.
+                colorStops[newHoverIdx].hover = true;
+            }
+            if(draggedIdx !== -1){ // Check if drag operation is active for some element(draggedIdx point on that element if its not -1).
+                let pos = (m.x-cPaddingLeft)/(cEl.width-2*cPaddingLeft); // Normalized(0-1) position.
+                pos = Math.min(Math.max(pos,0),1); // Clamp in 0,1 range for safety.
+                colorStops[draggedIdx].pos = pos; // Update dragged color stop position in array.
+            }
+            break;
+        }
+    update(); // update the display after handling events.
+    function isMouseOverGrad(e){ // Check if mouse is over gradient area (not the controls-2 triangles).
+        return !(m.x < cPaddingLeft || m.x > cEl.width-cPaddingLeft || m.y < cPaddingTop || m.y > cEl.height-cPaddingTop); // Basic collision detecton for mouse on rectanle(gradient area within canvas).
+    }
+    function mouseOverIdx(e){ // Finds index of stop color under mouse(if any).
+        return colorStops.findIndex(obj=>{ // Return index of color stop (-1 if none).
+            const x0 = cPaddingLeft+(cEl.width-2*cPaddingLeft)*obj.pos; // Maps(convert) color stop position from range(0,1) to the range (0,gradiend area on canvas width).
+            const y1 = cPaddingTop; // Vertical coordinate for top triangle.
+            const y2 = cEl.height-cPaddingTop; // Vertical coordinate for bottom triangle.
+            const isOverTopTriang = !(m.x < x0-6 || m.x > x0+6 || m.y < y1-15 || m.y > y1); // Check if mouse is over top triagle. m object holds local mouse coordinates (line 92).
+            const isOverBottomTriang = !(m.x < x0-6 || m.x > x0+6 || m.y < y2 || m.y > y2+15); // The same for bottom triangle.
+            return isOverTopTriang || isOverBottomTriang; // Returns true of false. findIndex method returns index of the first object for which that function returns true.
+        });
+    }
+}
+function update(){ // Update everything - gradients, controls, and CSS output.
+    const angle = parseInt(inputRangeElem.value); // Get angle value from slider.
+    const gradiantObj = ctx.createLinearGradient(cPaddingLeft,0,cEl.width-2*cPaddingLeft,0); // Create liner gradient object. It must fit to the area on canvas designated for it.
+    let CSS_declaration ="background: linear-gradient("+(angle !== 180 ? `${angle}deg, ` : ""); // Start building CSS declaration string. 180deg is default angel, no need to explicitly set it.
+    colorStops.sort((a,b)=>a.pos-b.pos); // Sort color stops by position(ascending).
+    colorStops.forEach((obj,i)=>{ // Loops through color stops.
+        gradiantObj.addColorStop(obj.pos, obj.color); // Adds color stops.
+        CSS_declaration += obj.color+" "+Math.floor(obj.pos*100)+"% "; // Construct CSS declaration.
+        CSS_declaration += i < colorStops.length-1 ? ", " : ");"; // Ternary operator. For the last color stop must add ')' instead of ', '.
+    });
+    footerElem.textContent = CSS_declaration; // Display CSS in footer.
+    mainElem.style = CSS_declaration; // Apply gradient to main element.
+    ctx.clearRect(0,0,cEl.width,cEl.height); // Clear canvas.
+    ctx.fillStyle = gradiantObj; // Set fill style as already constructed liner gradient object.
+    ctx.fillRect(cPaddingLeft,cPaddingTop,cEl.width-2*cPaddingLeft,cEl.height-2*cPaddingTop); // Draw gradient on canvas.
+    renderTriang(); 
+}
+function renderTriang(){ // Draw the control trianles on canvas for each color stop.
+    colorStops.forEach(obj=>{ // Loops through each color stop object.
+        const x0 = cPaddingLeft+(cEl.width-2*cPaddingLeft)*obj.pos; // Maps(convert) color stop position from range(0,1) to the range (0,gradiend area on canvas width).
+        const y1 = cPaddingTop; // Vertical coordinate for top triangle.
+        const y2 = cEl.height-cPaddingTop; // Vertical coordinate for bottom triangle.
+        const d = obj.hover || obj.selected ? 5 : 0; // Add extra spacing if hoverd or selected.
+        ctx.fillStyle = obj.color; // Set respectve color and draw 2 triangles.
+        ctx.beginPath();
+        ctx.moveTo(x0,y1-d);
+        ctx.lineTo(x0-6,y1-10-d);
+        ctx.lineTo(x0+6,y1-10-d);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x0,y2+d);
+        ctx.lineTo(x0-6,y2+10+d);
+        ctx.lineTo(x0+6,y2+10+d);
+        ctx.closePath();
+        ctx.fill();
+    });
+}
+function angleAndColor(e){ // Handler changes to angle and color controls.
+    const selectedIdx = colorStops.findIndex(obj=>obj.selected); // Get index of selected color stop (-1 if none).
+    switch(e.target.type){ // In the <nav> element only slider and color picker can fire 'change' events. Buttons fire 'click' events. 
+        case "color": // Update selected stop color.
+            if(selectedIdx === -1) return;
+            colorStops[selectedIdx].color = e.target.value;
+            update();
+            break;
+        case "range": // Update gradient angle.
+            const angle = parseInt(inputRangeElem.value);
+            document.querySelector("#angle").textContent = angle; // Update text in <span> element, it serves as label for slider.
+            update();
+            break;
+        }
+}
+function rgbToHex(r,g,b){ // Convert RGB to hex.
+    return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+function localMouseCoord(e,elem){ // Return object containing x and y local mouse coordinates within 'elem'.
+    const rect = elem.getBoundingClientRect();
+    return {x: e.clientX-rect.left, y: e.clientY-rect.top};
+}
+function copyToClipboard(){ // Copies CSS to clipboard(paste it where you need it).
+    navigator.clipboard.writeText(footerElem.textContent);
+}
+function deleteColorStop(){ // Deletes currently selected color stop.
+    const selectedIdx = colorStops.findIndex(obj=>obj.selected);
+    if(selectedIdx !== -1 && colorStops.length > 2) // Delete only if there some color stop selecter and must not delete last 2 remaining color stops.
+        colorStops.splice(selectedIdx,1);
+    update();
+}
+
+//*************************** initialization ************************
+onload = ()=>{ // When page loads set canvas dimensions and perfom initial render(update()).
+    [cEl.width,cEl.height] = [headerElem.offsetWidth,headerElem.offsetHeight];
+    update();
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
