@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Color Lines Game</title>
+        <style> /* Internal CSS styling. */
+            :root{ /* Pseudo-class matches the document's root element - <html>. CSS variables for dynamic sizing based on viewport's size. */
+                --cell-size: min(calc(100vw / 9), calc(100vh / 11));
+                --main-size: calc(var(--cell-size) * 9);
+                --header-height: calc(var(--cell-size) * 1.5);
+                --font-size: calc(var(--cell-size) / 2);
+                --ball-size: calc(var(--cell-size) * .75);
+            }
+            *{ /* Univervale selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include padding and border in element's total with and height. */
+                font: var(--font-size) Arial; /* Set default font using CSS variale. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexible box layout model. */
+                flex-direction: column; /* Stack children vertically. */
+                justify-content: center; /* Center children vertically. */
+                align-items: center; /* Center children horizontally. */
+                background-color: #111; /* All color choices up to you. */
+                row-gap: 10px; /* Gap between children. */
+            }
+            header{ /* Type selector. */
+                width: var(--main-size); /* Use CSS varaible. */
+                height: var(--header-height); /* Use CSS variable. */
+                display: flex; /* Flexible layout box model. */
+                justify-content: space-evenly; /* Evenly spaced children. */
+                align-items: center; /* Center children vertically. */
+                background-color: silver;
+            }
+            div.score{ /* Compound selector. */
+                min-width: calc(var(--cell-size) * 3); /* Score display styling. Must not change width when content does(8 → 10, 98 → 100). */
+            }
+            #next-balls{ /* id selector. */
+                min-width: calc(var(--cell-size) * 3); /* To fit 3 balls in. */
+                min-height: var(--cell-size); /* 3 balls in one row. */
+                display: grid; /* Grid layout. */
+                grid-template-columns: repeat(3,1fr); /* 3 equal columns. */
+                background-color: lightGray;
+            }
+            main{ /* Type selector. */
+                width: var(--main-size); /* Use CSS variable. */
+                height: var(--main-size); /* Use CSS variable. */
+                display: grid; /* Grid layout. */
+                grid-template-columns: repeat(9,1fr); /* 9 equal columns. */
+                grid-template-rows: repeat(9,1fr); /* 9 euqal rows. */
+                background: /* Complex background pattern. */
+                    linear-gradient(dimGray 2px, transparent 2px), /* Vertical lines, each 2px wide, the rest is transparent. */
+                    linear-gradient(90deg, dimGray 2px, transparent 2px), /* the same logic for vertical (90deg rotation) lines. */
+                    repeating-conic-gradient( /* Repeating diagonal checker pattern. Alternates between silver (0-25%), and darkGray (25%-50%). */
+                        silver 0% 25%,
+                        darkGray 25% 50%
+                    )
+                    0 0 / calc(var(--cell-size)*2) calc(var(--cell-size)*2); /* Position all gradients at 0,0(top-level corner). Sets the background size for the conic gradient to be twice the cell size. */
+                background-size: /* Backgound sizing. */
+                    var(--cell-size) var(--cell-size), /* Makes the vertical lines repeat every cell width. */
+                    var(--cell-size) var(--cell-size), /* Makes the horizontal lines repeat every cell height. */
+                    calc(var(--cell-size) * 2) calc(var(--cell-size) * 2); /* Makes checkerboard pattern repeat every 2 cells. */
+            }
+            .ball{ /* Class selector. */
+                width: var(--ball-size); /* Use CSS variable. */
+                height: var(--ball-size); /* Use CSS variable. */
+                border-radius: 50% 50%; /* Circular shape. */
+                justify-self: center; /* Center itself horizontally within grid area. */
+                align-self: center; /* Center itself vertically. */
+                position: relative;
+                box-shadow: /* 3d effect with shadows. */
+                    0 3px 5px rgba(0,0,0,0.4), /* Drop shadow. */
+                    inset 0 -5px 10px rgba(0,0,0,0.4), /* Bottom inner shadow. */
+                    inset 0 5px 10px rgba(255,255,255,0.2); /* Top inner highlight. */
+                background: radial-gradient( /* Shiny gradient effect. */
+                    circle at 30% 30%,
+                    rgba(255,255,255,0.8) 0%,
+                    rgba(255,255,255,0.1) 20%,
+                    transparent 50%
+                );
+            }
+            .ball:hover,.selected { /* Selector list. Hover and selected balls. */
+                transform: scale(1.1); /* Slightly enlarge. */
+                box-shadow: /* Change shadows a bit. */
+                    0 8px 15px rgba(0,0,0,0.3),
+                    inset 0 -3px 8px rgba(0,0,0,0.3),
+                    inset 0 3px 8px rgba(255,255,255,0.4);
+            }
+            .selected{ /* Class selector. Additional styling for selected balls. */
+                border: 2px solid white; 
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-lever container. Wrapps everything. -->
+            <header> <!-- Semantic HTML element. Contains score dislay and container for next balls preview. -->
+                <div class="score">Score: <span class="score">0</span></div>
+                <span>Next:</span>
+                <div id="next-balls"></div>
+            </header>
+            <main></main> <!-- 9x9 game board. Semantic HTML element. -->
+        </div>
+        <script>
+//*************************** global variables **********************
+const mainElem = document.querySelector("main"); // Reference to game board.
+const nextBallsElem = document.querySelector("#next-balls"); // Next balls container.
+const scoreElem = document.querySelector("span.score"); // Score display.
+const board = Array.from({length: 9},_=>Array(9).fill("")); // 2d array filled with empty strings "".
+const ballColors = ["red","blue","green","yellow","purple"]; // Availble ball colors. 
+const cellSize =mainElem.offsetWidth/9; // Fit the size defined in ':root'.
+
+//*************************** events ********************************
+mainElem.addEventListener("click",handleMouse); // One and only mouse event - click.
+
+//*************************** logic *********************************
+function game(){ // Main game function.
+    if(nextBallsElem.children.length === 3) return; // Only proceed if next balls container is emptied.
+    for(let i = 0; i < 3; i++){ // Add 3 new balls to the 'next' preview.
+        createBallElem(0,i,randBall(),nextBallsElem);
+    }
+    board.forEach((rowArr,r)=>rowArr.forEach((cell,c)=>{ // nested 'forEach' array methods iterate over each cell in the 2D board array. The goal is to find completed lines (5+ same-color balls).
+        if(cell === "") return; // Skip empty cells.
+        [-1,0,1].forEach(stepRow=>[-1,0,1].forEach(stepCol=>{ // Again nested 'forEach', this time to check all possible 8 directions.
+            if(!(stepRow || stepCol)) return; // Skip 0,0 - no movement.
+            let [currRow,currCol] = [r,c]; // Destructurin syntac. r and c are current cell row and colums from outer 'forEach' loops.
+            const cellsInLine = []; // Track cells in this potentioal line.
+            do{ // do...while loop to go in direction defined by stepRow,stopCol.
+                cellsInLine.push([currRow,currCol]); // Add to track array 2 member array with current cell row and column 'coordinates'.
+                currRow += stepRow; // Increase(or decrease depening on stepRow(-1,1).
+                currCol += stepCol;
+            }while(board?.[currRow]?.[currCol] === cell) // Exit out of loop as soon as current cell is different color from 'initial' cell. ?. opional chaining for edge cases (try to access outside board).
+            if(cellsInLine.length >= 5){ // If line 5+ found.
+                do{ // Do...while loop.
+                    const [r,c] = cellsInLine.pop(); // Destructuring syntax.('cellsInLine' array constaint 2 member arrays). Get row and colum.
+                    board[r][c] = ""; // Crear board.
+                    const elem = document.querySelector(`.cell-${r}-${c}`); // Get HTML element representing this ball.
+                    elem.remove(); // Remove ball element.
+                    scoreElem.textContent = parseInt(scoreElem.textContent)+2; // Update score (2 points for each ball).
+                }while(cellsInLine.length); // loops while there ara balls in line left.
+            } 
+        }));
+    }));
+}
+function handleMouse(e){ // Handle mouse clicks on game board(main element).
+    const rect = mainElem.getBoundingClientRect(); // object containing position.
+    const mouseRow = (e.clientY-rect.top)/cellSize | 0; // Convert mouse x,y viewport's coordinates to respective row and column within board. | 0 is fast floor (Math.floor() alternative for positive numbers).
+    const mouseCol =(e.clientX-rect.left)/cellSize | 0;
+    const selectedElem = document.querySelector(".selected"); // Selected(clicked) ball. null if none.
+    if(e.target.matches(".ball")){ // Check the HTML element that fired the event if it will be selected by '.ball' selector - mean ball was clicked(not empty board).
+        if(selectedElem) selectedElem.classList.toggle("selected"); // If some ball alreade selected - deselect it.
+        e.target.classList.toggle("selected"); // select clikced ball.
+    }
+    if(selectedElem && e.target.matches("main") && selectedElem !== e.target){ // Check if it have sence to try to move ball to new position. If we have a selected ball and clicked on empty space.
+        const [fromRow,fromCol] = selectedElem.className.match(/\d+/g).map(v=>parseInt(v)); // Get selected ball position from its className.
+        if(mouseRow !== fromRow && mouseCol !== fromCol && Math.abs(mouseRow-fromRow) !== Math.abs(mouseCol-fromCol)) return; // Validate if the move is in staight line (horizontal, vetical, diagonal).
+        const [stepRow,stepCol] = [Math.sign(mouseRow-fromRow),Math.sign(mouseCol-fromCol)]; // Calculate step(movement) direction. Destructuring syntax.
+        let [currRow,currCol] = [fromRow+stepRow,fromCol+stepCol]; // currRow,currCol, will track cells in defined direction. Thats a first move.
+        while(currRow !== mouseRow || currCol !== mouseCol){ // Until we hit the clicked cell. 
+            if(board[currRow]?.[currCol] !== "") return; // If there any ball on the way, we cant jump over it, and return.
+            currRow += stepRow, currCol += stepCol; // perform step.
+        }// if we are out of loop, means ball must be moved.
+        selectedElem.style.gridArea = `${mouseRow+1}/${mouseCol+1}/span 1/span 1`; // Set balls new position within grid. +1 becaulse '2d' array 'board' is zero based, and grid layout is 1 based.
+        selectedElem.className = `ball cell-${mouseRow}-${mouseCol}`; // Set new class name encoding its position in it.
+        board[mouseRow][mouseCol] = board[fromRow][fromCol]; // Swap cells in board array. Destructuring syntax again and again.
+        while(nextBallsElem.lastChild){ // Place on board all waiting balls from the 'next' preview.
+        const elem = nextBallsElem.lastChild;
+        const ball = elem.style.backgroundColor;
+        elem.remove();
+        placeBallAtRandomPos(ball);        
+        }
+    }
+    game(); // Run game logic after move.
+}
+function placeBallAtRandomPos(ball){ // Place a ball on board an a random position.
+    if(!board.some(row=>row.some(cell=>cell === ""))){ // Nested 'some' array methods to check if there is empty cell on board.
+        if(confirm("Game Over")){ // If not, game is over.
+            location.reload(); // reload the page.
+        }
+        return;
+    }
+    let row,col; // Functio scope variables.
+    do{ // do while loop to find random empty cell.
+        [row,col] = [9*Math.random() | 0, 9*Math.random() | 0]; // Some radom cell.
+    }while(board[row][col] !== ""); // Exit out of loop if cell is empty.
+    createBallElem(row,col,ball,mainElem); // Create an element on calculated positoin.
+    board[row][col] = ball; // Place ball in 2d board array.
+}
+function createBallElem(row,col,ball,parent){ // Creates an HTML element.
+    const elem = document.createElement("div");
+    elem.className = `ball cell-${row}-${col}`; // Encode ball position within its className,
+    elem.style.gridArea = `${row+1}/${col+1}/span 1/span 1`; // Set ball positoin within grid.
+    elem.style.backgroundColor = ball; // ball color.
+    parent.appendChild(elem); // add to DOM.
+}
+function randBall(){ // Helper function.
+    return ballColors[Math.random()*ballColors.length | 0]; // Returns random color from possible preset colors.
+}
+
+//*************************** initialization ************************
+onload = ()=>{ // When page is loaded.
+    for(let i = 0; i < 5; i++) placeBallAtRandomPos(randBall()); // Place 5 random balls to start the game.
+    game(); // ran game logic.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
