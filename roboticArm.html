@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=devide-width, initial-scale=1.0">
+        <title>Robotic arm</title>
+        <style> /* Internal CSS styling. */
+            :root{ /* CSS varialbles, for responsive page design. Defines propertional siziing for robitic arm components. */
+                --elbow-width: calc(100vw / 4);
+                --elbow-height: calc(100vw /20);
+                --forearm-width: calc(100vw / 5);
+                --forearm-height: calc(100vw / 30);
+            }
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's widht. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* flexible layout box model. */
+                flex-direction: column; /* Stack children vertically. */
+                overflow: hidden; /* Clip overflow content, no scrollbars. */
+            }
+            main{ /* Type selector. */
+                width: 100%; /* 100% of the parents width. */
+                height: calc(100vh - 100px); /* remaining space minus footer. */
+                background-color: darkSlateGray; /* all colors are up to you. */
+                position: relative; /* for absolute positioning of chidren. */
+            }
+            #elbow-joint{ /* id selector. */
+                width: var(--elbow-width); /* Use CSS variable. */
+                height: var(--elbow-height);; /* Use CSS variable. */
+                background-color: maroon;
+                border-radius: calc(var(--elbow-height) / 2); /* Fully rounded corners. */
+                position: absolute; /* Enables inline style attribute (will be rotated by JS), and child absolute positioning. */
+                left: 50vw; /* Centered horizontally. */
+                top: calc((100vh - 120px) / 2); /* Centered virticall (taking into account footer's height. */
+            }
+            #forearm-link{ /* id selector. */
+                width: var(--forearm-width); /* Use CSS variable. */
+                height: var(--forearm-height); /* Use CSS variable. */
+                background-color: midnightBlue;
+                border-radius: calc(var(--forearm-height) / 2) 0 0 calc(var(--forearm-height) / 2); /* Round left side only. */
+                position: absolute; /* Positioned relative to elbow. */
+                left: calc(var(--elbow-width) - var(--elbow-height) / 2); /* Connected to elbow. */
+                top: calc(var(--elbow-height) / 2); /* Centered vertically relative to elbow. */
+            }
+            #wrist-assembly{ /* id selector. */
+                width: 2vw; /* Narrow vertical element. */
+                height: 10vw; /* Taller than forearm. */
+                background-color: indigo;
+                border-radius: 1vw 0 0 1vw; /* Rounded left side. */
+                position: absolute; /* Positioned relative to forearm. */
+                left: var(--forearm-width); /* Aligned with forearm end. */
+                top: calc(var(--forearm-height) / 2 - 5vw); /* Centered verticallly relative to forearm. */
+            }
+            .gripper{ /* Class selector. Selects both grippers. */
+                width: 6vw; /* I choose vw as base unit for responsive design. */
+                height: 1vw; /* 1vw in 1% of the vieport's width. */
+                background-color: orangeRed;
+                position: absolute; /* Positioned relative to wrist. */
+                margin-left: 2vw; /* Offset from wrist. */
+            }
+            .gripper.top{ /* Compound selector. */
+                border-radius: 0 1vw 0 0; /* Rounded top-right corner. */
+            }
+            .gripper.bottom{ /* Compound selector. */
+                border-radius: 0 0 1vw 0; /* Rounded bottom-right corner. */
+            }
+            footer{ /* Type selector. */
+                width: 100%; /* Full parent's width. */
+                height: 120px; /* Fixed height. */
+                background-color: #444;
+                display: flex; /* Flexible box layout model. */
+                justify-content: space-evenly; /* Evanly spaced controls. */
+                align-items: center; /* Center children vertically. */
+            }
+            .knob-controller{ /* Class selector. */
+                width: 80px; /* Fixed width. */
+                height: 80px; /* Fixed height. */
+                background-color: slateGray;
+                border: 5px solid dimGray; 
+                border-radius: 50%; /* Circular shape. */
+                user-select: none; /* Prevent text selection - "➡". */
+                display: flex; /* Flexible box layout model. */
+                justify-content: right; /* Arrow emoji on right side. */
+                align-items: center; /* Center children(➡) vertically. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <main> <!-- Contain Robotic arm structure. -->
+                <div id="elbow-joint">
+                    <div id="forearm-link">
+                        <div id="wrist-assembly">
+                            <div class="gripper top"></div>
+                            <div class="gripper bottom"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            <footer> <!-- Contain control elements. -->
+                <div class="knob-controller elbow-joint">➡&nbsp;</div>
+                <div class="knob-controller forearm-link">➡&nbsp;</div>
+                <input type="range" id="gripper-controller" min="0" max="50" value="0" autocomplete="off">
+            </footer>
+        </div>
+        <script> // Embedded JavaScript.
+//*************************** global variables **********************
+const wrapperElem = document.querySelector("#wrapper"); // DOM elements references.
+const footerElem = document.querySelector("footer");
+const elbowElem = document.querySelector("#elbow-joint");
+const forearmElem = document.querySelector("#forearm-link");
+const wristElem = document.querySelector("#wrist-assembly");
+const gripTopElem = document.querySelector(".gripper.top");
+const gripBottomElem = document.querySelector(".gripper.bottom");
+const knobElbowElem = document.querySelector("footer .elbow-joint");
+const knobForearmElem = document.querySelector("footer .forearm-link");
+const sliderElem = document.querySelector("#gripper-controller");
+const π = Math.PI; // (alt code 227) Code looks better that way.
+let initialMouseX, initialMouseY; // Initial mouse coordinates, when knob rotation starts (set within 'mousedown' event).
+let _cloneNode = null; // Reverence to active control knob HTML element. Also when it's value null, means no rotation is active(serve as flag variable too).
+
+//*************************** event *********************************
+footerElem.addEventListener("mousedown",handleKnobRotation); // This 3 mouse events required to handle knob rotation.
+footerElem.addEventListener("mouseup",handleKnobRotation);
+footerElem.addEventListener("mousemove",handleKnobRotation);
+document.querySelector("#gripper-controller").addEventListener("input",handleGripper); // Handle gripper opening/closing.
+//*************************** logic *********************************
+
+function handleKnobRotation(e){ // Handles knob rotation events for elbow and forearm controls.
+    switch(e.type){ /* e.type is the type of mouseevent. */
+        case "mousedown": /* Hold LMB on knob means start of rotation. */
+            if(!e.target.matches(".knob-controller")) return; // Only proceed if clicking on a knob controller.
+            [initialMouseX, initialMouseY] = [e.clientX, e.clientY]; // Destructuring syntax. Store initial mouse position. 
+            _cloneNode = e.target.cloneNode(); // Store knob element reference.
+            break;
+        case "mouseup": /* Releasing LMB - end of rotation operation. */
+            _cloneNode = null; /* Cleare active knob referenct. */
+            break;
+        case "mousemove": /* Perform rotation. */
+            if(!_cloneNode) break; /* _cloneNode is null, means no rotation in currently active. */
+            const className = _cloneNode.classList[1]; // "elbow-join" or "forearm-link".
+            const elem = document.querySelector(`footer .${className}`); // Get reference to manipulated (rotated) knob.
+            const rect = elem.getBoundingClientRect(); // Object containing size and position.
+            const [RCx,RCy] = [rect.left+rect.width/2, rect.top+rect.height/2]; // Destucturing syntax. Coordinates(viewport) - center of rotation.
+            const initialRotate = parseFloat(_cloneNode.style.transform.match(/-?\d+(\.\d+)?/)[0]); // Get current rotation. (extract using RegExp from style attribute).
+            const initialMouseAngle = Math.atan2(initialMouseY-RCy, initialMouseX-RCx); // Initial angle of vector from rotation center to mouse.
+            const currentMouseAngle = Math.atan2(e.clientY-RCy,e.clientX-RCx); // Current angle of vector from rotation center to mouse.
+            let newRotate = initialRotate+(currentMouseAngle-initialMouseAngle); // New rotation angle. Old value + how much mouse turned around center of rotation.
+            newRotate = newRotate < -π // Normalize rotation to stay within -π to π range.
+                ? newRotate+2*π
+                : newRotate > π
+                    ? newRotate-2*π
+                    : newRotate;
+            if(className === "forearm-link"){ // If we rotate forearm.
+                newRotate = Math.max(Math.min(newRotate,π*.6),-π*.6) // Apply rotation limits for forearm (60% of full rotation). 
+            }
+            Object.assign(elem.style,{transform:`rotate(${newRotate}rad)`}); // Rotate knob.
+            const elemToRotate = document.querySelector(`#${className}`); // Define rotate forearm or elbow.
+            Object.assign(elemToRotate.style,{transform:`translate(-10%,-50%) rotate(${newRotate}rad)`}); // Rotate respective Robotic are component.
+            break;
+    }
+}
+function handleGripper(){ // Opening/closing of gripper based on slider input.
+    let value = parseInt(sliderElem.value); // Get slider value.
+    const sliderMax = parseInt(sliderElem.max); // Maximum possible slider value.
+    const maxMoveDist = wristElem.offsetHeight/2 - gripTopElem.offsetHeight; // Calculate maximum posible movement distance.
+    const moveDist = value/sliderMax*maxMoveDist; // Calculate current movement distance. 
+    Object.assign(gripTopElem.style,{top:`${moveDist}px`}); // Position top gripper.
+    Object.assign(gripBottomElem.style,{top:`${wristElem. offsetHeight-gripTopElem.offsetHeight-moveDist}px`}); // Position bottom gripper.
+}
+
+//*************************** initilization *************************
+onload = ()=>{ // Event is fired when page is loaded. Set all required initial transform origins and rotation angles.
+    Object.assign(elbowElem.style,{transformOrigin:"10% 50%", transform:"translate(-10%,-50%)"});
+    Object.assign(forearmElem.style,{transformOrigin:"10% 50%", transform:"translate(-10%,-50%)"});
+    Object.assign(knobElbowElem.style,{transform:"rotate(0rad)"});
+    Object.assign(knobForearmElem.style,{transform:"rotate(0rad)"});
+    handleGripper();
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
