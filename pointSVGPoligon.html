@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Detect Mouse Inside or Outside a Polygon</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            #container{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                position: relative; /* for absolute positioning of children. */
+                background-color: peru; /* or whatever you like. */
+            }
+            svg{
+                width: 100%; /* 100% of the parents width. */
+                height: 100%; /* 100% of the parents height. */
+                position: absolute; /* relative to container. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container"> <!-- Contains SVG element. -->
+            <svg>
+                <path d="" stroke="blue" stroke-width="3" fill="none">
+            </svg>
+        </div>
+        <script>
+//*************************** global variables **********************
+const svgElem = document.querySelector("svg"); // References for convenience.
+const pathElem = document.querySelector("svg>path");
+//*************************** events ********************************
+document.addEventListener("click",addPoint); // Add polygon point on click.
+document.addEventListener("mousemove",checkMousePolygon); // Check if mouse in or out of polygon.
+//*************************** logic *********************************
+function addPoint(e){ // Accept mouse event object 'e' as an argument from 'click' event.
+    const [x,y] = [e.clientX, e.clientY]; // Destructuring syntax. Get mouse coordinates.
+    let d = pathElem.getAttribute("d"); // Current path 'd' attribute.
+    if(d?.slice(-1) === "Z") return; // Do nothing if path is closed already.
+    if(!d){ // If path is empty.
+        pathElem.setAttribute("d",`M ${x} ${y} `); // Move to command.
+        return;
+    }
+    const pathPointsCoord = d.match(/\d+/g).map(str=>parseInt(str)); // Extract all points coordinates from path 'd' attribute.
+    if(pathPointsCoord.length >= 6 && Math.hypot(x-pathPointsCoord[0],y-pathPointsCoord[1]) < 30) // If at least 3 points exist and click is within 30px from start point.
+        d += "Z"; // Close the path.
+    else
+        d += `L ${x} ${y} `; // Add a line to the point (LineTo command)
+    pathElem.setAttribute("d",d); // Update 'd' attribute.
+}
+function checkMousePolygon(e){ // Check mouse in/out of polygon.
+    const d = pathElem.getAttribute("d"); // Current path 'd' attribute.
+    if(d?.endsWith("Z")){ // Only check if path is closed!
+        const point = svgElem.createSVGPoint(); // Create an SVG point at mouse position.
+        [point.x, point.y] =[e.clientX, e.clientY]; // Destructuring syntax. Set SVG point coordinates equal to mouse.
+        const isInside = pathElem.isPointInFill(point); // Check if SVG point is inside the polygon.
+        if(isInside) pathElem.setAttribute("fill","maroon"); // 'maroon' color if inside.
+        else pathElem.setAttribute("fill","darkGreen"); // 'darkGreen' color if outside.
+    }
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
