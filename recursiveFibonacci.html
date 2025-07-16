@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Recursive Fibonacci</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default patting. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            body{ /* Type selector. */
+                background-color: #222; /* Dark background. */
+            }
+            #container{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                white-space: pre-wrap; /* Text will wrap on line breaks \n. */
+                user-select: none; /* Prevents text selection. */
+                color: gold; /* Gold text color. */
+                font: 20px Arial; /* Font settings. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container"></div> <!-- Output container. -->
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIABLES **********************
+const contElem = document.querySelector("#container"); // Reference to display div.
+let multilineStr = ""; // Accumulates the multiline text to display.
+//*************************** LOGIC *********************************
+function recursiveFibonacci(n){ // Recursive function to calculate fibonacci number.
+    const stack = new Error().stack; // Get call stack!
+    console.log(stack); // To demonstrate what is call stack.
+    let calls = stack.split("\n").slice(1).filter(Boolean); // Split by lines, remove 1st line(it's from error),filter empty lines.
+    const indent = "    ".repeat(calls.length); // 4 spaces pre call depth level.
+    const funcName = calls[calls.length-1].match(/[^\/]+(?=\.html)/)[0]; // Extract function name from call stack trace.
+    multilineStr += `${indent}${funcName}(${n})\n`; // Add function entry to multiline text to display.
+    contElem.textContent = multilineStr; // display text.
+    if(n <= 1){ // Base case: fib(0) = 0, fig(1) = 1.
+        multilineStr += `${indent}return ${n}\n`;
+        contElem.textContent = multilineStr;
+        return n;
+    }
+    // Recursive cases.
+    const a = recursiveFibonacci(n-2);
+    const b = recursiveFibonacci(n-1);
+    const result = a+b; 
+    multilineStr += `${indent}return ${result}\n`; // Add return statement to display (unwinding).
+    contElem.textContent = multilineStr; // Display the multiline text.
+    return result; // Return result.
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // Event is fired when page is loaded.
+    const number = 5; // Try different numbers.
+    const fibonacci = recursiveFibonacci(number); // Get fibonacci numbor of 'number'.
+    multilineStr += `\n\nFinal result: fibonacci of (${number}): ${fibonacci}`; // Add last line.
+    contElem.textContent = multilineStr; // Display final result.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
