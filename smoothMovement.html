@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Smooth random movement</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            #container{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of teh viewport's height. */
+                position: relative; /* For canvas absolute positioning. */
+                background: black; /* your choice. */
+                overflow: hidden; /* clip overflow content, no scrollbars. */
+            }
+            canvas{ /* Type selector. */
+                position: relative;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container"> <!-- Contains canvas. -->
+            <canvas></canvas>
+        </div>
+        <script>
+//*************************** GLOGAL VARIABLES **********************
+const contElem = document.querySelector("#container"); // Reference to container.
+const canvasElem = document.querySelector("canvas"); // Reference to canvas.
+const ctx = canvasElem.getContext("2d"); // Canvas 2d context.
+const π = Math.PI; // 'π' alt code 227.
+let lastTime; // Timestamp of last frame.
+const particles = []; // Array to store objects representing particles.
+const particlesQt = 50; // Number of particles.
+
+//*************************** LOGIC *********************************
+class Particle{ // Class - template to create particles.
+    static rotationDirection(currΘ,targΘ){ // Method to determine shortest rotation direction between two angles.
+        let delta = targΘ-currΘ; // Raw difference between target and current angles.
+        if(delta > π) delta -= 2*π; // Adjust if over π (clockwise shorter).
+        else if(delta < -π) delta += 2*π; // Adjust if under -π (counter-clockwise shorter);
+        return Math.sign(delta); // Return -1, 0, or 1 for direction.
+    }
+    static modulo(Θ){ // Method to normalize angle to [0,2π] range.
+        return ((Θ%(2*π))+2*π)%(2*π); // Handles negative angles correctly.
+    }
+    // Class-wide (static) constants.
+    static angularSpeed = 0.002; // Speed of angle change (radians/ms);
+    static minVel = 0.02; // Minimum velocity px/ms.
+    static maxVel = 0.07; // Maximum velocity px/ms.
+    static maxTrailLength = 20; // Maximum number of trail points.
+    static intervalBetweenTrailPoints = 100; // Time(ms) between new trail points.
+    constructor(){ // Special class method to create class instance.
+        const {width: W, height: H} = canvasElem; // Decustructuring syntax with alias.
+        this.size = Math.min(W,H)/70 | 0; // Size proportional to viewport. | 0 fast floor.
+        this.x = W*Math.random(); // Random x position.
+        this.y = H*Math.random(); // Random y postioin.
+        this.Θ = 2*π*Math.random(); // Random initial angle. 'Θ' alt code 233.
+        this.targetΘ = 2*π*Math.random(); // Random target angle.
+        this.rotDirection = Particle.rotationDirection(this.Θ,this.targetΘ); // Initial rotation direction.
+        this.vel = Particle.minVel+(Particle.maxVel-Particle.minVel)*Math.random(); // Random velocity.
+        this.hue = 360*Math.random() | 0; // Random color hue (0-359). | 0 is fast floor.
+        this.trailPoints = []; // Array to store trail positions.
+        this.trailTimer = 0; // Time interval to add new prail position(and remove the oldest position)
+    }
+    update(frTime){ // Update particle position, direction and trail.
+        const {width: W, height: H} = canvasElem; // Destructuring syntax with alias. Get canvas dimensions.
+        this.trailTimer += frTime; // Update trail timer.
+        if(this.trailTimer >= Particle.intervalBetweenTrailPoints){ // If interval passed.
+            this.trailTimer = 0; // Reset trail timer.
+            this.trailPoints.unshift({ // Add current position to trail.
+                x: this.x,
+                y: this.y,
+            });
+            if(this.trailPoints.length > Particle.maxTrailLength) // If number of trail positions greater than max.
+                this.trailPoints.pop(); // Remove oldest position.
+        }
+        this.Θ += Particle.angularSpeed*frTime*this.rotDirection; // Update current angle based on anglar speed, frame time, and rotation direction.
+        this.Θ = Particle.modulo(this.Θ); // Normalize to [0,2π] range.
+        if(Math.abs(this.Θ-this.targetΘ) < 0.08){ // If current angle is close enough to target angle.
+            const delta = π/2*Math.random()-π/4; // Random angle change (-π/4 to π/4).
+            this.targetΘ = this.Θ+delta; // Set new target angle.
+            this.targetΘ = Particle.modulo(this.targetΘ); // Normalize to [0,2π] range.
+            this.rotDirection = Particle.rotationDirection(this.Θ,this.targetΘ); // Update rotation direction.
+        }
+        // Update position based on current angle, velocity and frame time.
+        this.x += Math.cos(this.Θ)*this.vel*frTime; 
+        this.y += Math.sin(this.Θ)*this.vel*frTime;
+        if(this.x < 0 || this.x > W || this.y < 0 || this.y > H){ // Check if particle is outside canvas, and wrap it around edges.
+            this.trailPoints.length = 0; // Must draw new trail.
+            if(this.x < 0) this.x = W;
+            if(this.x > W) this.x = 0;
+            if(this.y < 0) this.y = H;
+            if(this.y > H) this.y = 0;
+        }
+    }
+    render(){ // Draw trail and particle on canvas.
+        if(this.trailPoints.length){ // If there is at least one position in trail.
+            ctx.beginPath(); 
+            ctx.strokeStyle = `hsl(${this.hue},70%,50%)`; // Trail color.
+            ctx.lineWidth = this.size/2 | 0; // Trail width, half of particle size.
+            ctx.moveTo(this.x,this.y); // Start and current position.
+            this.trailPoints.forEach(p=>{ // Connect all trail points.
+                ctx.lineTo(p.x,p.y);
+            });
+            ctx.stroke(); // Draw a line through all trail points.
+        }
+        ctx.beginPath(); // Draw particle itself.
+        ctx.arc(this.x,this.y,this.size,0,2*π);
+        ctx.fillStyle = `hsl(${this.hue},100%,50%)`;
+        ctx.fill();
+    }
+}
+function animate(timestamp){ // Animation loop.
+    if(!lastTime) lastTime = timestamp; // Initializa on first frame.
+    const frameTime = timestamp-lastTime; // Calculate time since last frame.
+    lastTime = timestamp; // Store current time as last frame time.
+    ctx.clearRect(0,0,canvasElem.width,canvasElem.height); // Clear canvas.
+    particles.forEach(p=>{ // Iterate over all particles.
+        p.update(frameTime); // Update particle, passing frame time.
+        p.render(); // Draw particle + trail.
+    });
+    requestAnimationFrame(animate); // loop. 
+}
+
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // event fired when page is loaded.
+    [canvasElem.width,canvasElem.height] = [contElem.offsetWidth,contElem.offsetHeight]; // Destructuring syntax. Set canvas size.
+    for(let i = 0; i < particlesQt; i++) // Create particles.
+        particles.push(new Particle());
+    requestAnimationFrame(animate); // Start animation loop.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
