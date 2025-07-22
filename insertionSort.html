@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Insertion Sort</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Removed default padding. */
+                box-sizing: border-box; /* Include border and padding in element's total width and height. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: grid; /* Centering using CSS Grid. */
+                place-items: center; /* Horizontal and vertical centering. */
+                background-color: seaGreen; /* The choice of colors is yours. */
+                overflow: hidden; /* No scrollbars. */
+            }
+            main{ /* Type selector. */
+                background-color: darkKhaki;
+                position: relative; /* For absolute positioning of elements. */
+            }
+            .array-element{ /* Class selector. */
+                position: absolute; /* Positioned relative to main. */
+                background-color: orange;
+                display: grid; /* Centering using Grid. */
+                place-items: center; /* Horizontal and vertical centering. */
+                border: 2px solid blue; /* Visual boundary. */
+                font-family: Arial; /* Readable font. */
+                font-weight: bold;
+                transition: background-color, 1s; /* Smoth color transition. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Contains main element. -->
+            <main></main> <!-- Array elements inserted here. -->
+        </div>
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIABLES **********************
+const wrapperElem = document.querySelector("#wrapper"); // Reference to wrapper.
+const mainElem = document.querySelector("main"); // Reference to main.
+let size; // Size of each array element (px).
+let rowQt, colQt; // Number of rows and columns.
+
+//*************************** LOGIC *********************************
+function initArray(){ // Initialize visual array with random values(textContent).
+    const sizes = [45,55,65,75,90,105]; // Possible element sizes.
+    const [W,H] = [wrapperElem.offsetWidth,wrapperElem.offsetHeight]; // Destructuring syntax. 
+    size = sizes[~~(Math.random()*sizes.length)]; // Ransomly select element size. ~~ is fast floor.
+    [rowQt,colQt] = [Math.floor(H/size), Math.floor(W/size)]; // Destructuring syntax. Calculate grid capacity.
+    mainElem.style = `width:${colQt*size}px;height:${rowQt*size}px;`; // Set main dimensions. 
+    let index = 0; // Variable to index elements, and encode that index in element's id.
+    for(let r = 1; r < rowQt; r += 2) // Skipp every other row for spacing.
+        for(let c = 0; c < colQt; c++){ // Iterater over columns.
+            const el = document.createElement("div"); // Create div.
+            el.style = `width:${size}px;height:${size}px;left:${c*size}px;top:${r*size}px;`; // Set size and position.
+            el.style.transform = "scale(.9)"; // Slight size reduction, to create gap.
+            el.style.borderRadius = `${size/8}px`; // Rounded corners.
+            el.className = "array-element"; // Class. CSS can select all at once.
+            el.id = `index${index++}`; // Unique ID for sorting.
+            el.dataset.row = r; // Use custom data attributes to store row and column position of current element (div).
+            el.dataset.col = c;
+            el.textContent = ~~(Math.random()*rowQt*colQt); // Random integer value (range based on grid size). 
+            el.style.fontSize = `${size/2.2}px`; // Responsive font size.
+            mainElem.appendChild(el); // Add to main.
+        }
+}
+async function insertionSort(){ // Visual insertion sort.
+    let arrNodeList = Array.from(mainElem.querySelectorAll(".array-element")); // Get collection of div's representing array elements, and convert ir to the array.
+    for(let i = 1; i < arrNodeList.length; i++){ // Main insertion sort for loop.
+        setColor(i,"dodgerBlue"); // Highlight current element.
+        await moveElem(i,Math.floor((i-1)/colQt)*2,(i-1)%colQt); // Move element to comparison row(empty rows skipped during initialization.)
+        let j = i-1; // Index to start searching for position to insert into.
+        const elemToInsert = arrNodeList.splice(i,1)[0]; // Extract element.
+        while(j >= 0 && Number(arrNodeList[j].textContent) > Number(elemToInsert.textContent)){ // Find correct position to insert into.
+            setColor(j,"dodgerBlue"); // Highlight comparison.
+            await moveElem(j,Math.floor((j+1)/colQt)*2+1,(j+1)%colQt); // Shift element right.
+            arrNodeList[j].id = `index${j+1}`; // Update position id.
+            j--; // Pick up next element on the left.
+        }
+        elemToInsert.id = `index${j+1}`; // Assign correct index.
+        arrNodeList.splice(j+1,0,elemToInsert); // Insert back into array.
+        await moveElem(j+1,Math.floor((j+1)/colQt)*2+1,(j+1)%colQt); // Move from comparison row to find position.
+    }
+}
+function moveElem(i,row,col){ // Move elements betwee greed positions. i - Element index, row - Target row, col - Target column.
+    return new Promise(res=>{ // Return promise, resolves when animation completes.
+        const el = document.querySelector(`#index${i}`); // Reference to the element to move.
+        el.style.zIndex = "1"; // Bring to front during movement.
+        const [x0,y0] = [Number(el.dataset.col)*size,Number(el.dataset.row)*size]; // Move from coordinates.
+        const [x1,y1] = [col*size,row*size]; // Target coordinates.
+        const animation = el.animate( // Create animation (WAAPI).
+            [ // Keyframes.
+                {left: x0+"px", top: y0+"px"}, // Start position.
+                {left: x1+"px", top: y1+"px"}, // End position.
+            ],
+            { // Settings.
+                duration: Math.hypot(x1-x0,y1-y0)*5, // Distance-based timing.
+                iterations: 1, // Do it once.
+                easing: "linear",
+                fill: "forwards", // Maintain final position.
+            }
+        );
+        animation.finished.then(()=>{ // Cleanup after animation.
+            el.dataset.col = col; // Update position data.
+            el.dataset.row = row;
+            el.style.zIndex = ""; // Reset stacking order.
+            res(); // Resolve promise.
+        });
+    });
+}
+function setColor(i,color){ // Helper function to set elements color.
+    document.querySelector(`#index${i}`).style.backgroundColor = color;
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // Event fires when page is loaded.
+    initArray(); // Create visual array.
+    insertionSort(); // Begin sorting animation.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
