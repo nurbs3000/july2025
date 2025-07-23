@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf=8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Digital Differential Analyzer</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove default padding. */
+                box-sizing: border-box; /* Include border and padding in element's total width and height. */
+            }
+            #container{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the vieport's height. */
+                background-color: beige; /* optional. */
+                position: relative; /* For absolute positioning of canvas. */
+            }
+            canvas{ /* Type selector. */
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container"> <!-- Contain canvas. -->
+            <canvas></canvas>
+        </div>
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIABLES **********************
+const contElem = document.querySelector('#container'); // Reference to container.
+const canvasElem = document.querySelector('canvas'); // Referemce to canvas.
+const ctx = canvasElem.getContext('2d'); // Canvas 2d context.
+let x1, y1; // First point coordinates.
+
+//*************************** EVENTS ********************************
+canvasElem.addEventListener('click',drawLine); // DDA algorithm.
+
+//*************************** LOGIC *********************************
+function drawLine(e){ // Draw line from (x1,y1) to (x2,y2);
+    const [mX,mY] = [e.clientX,e.clientY]; // Destucturing syntax. Get mouse coordinates.
+    if(x1 === undefined){ // If it is first click.
+        [x1,y1] = [mX,mY]; // Set point (x1,y2) to mouse position.
+        return; // Return. 2nd click required to get 2nd point (x2,y2).
+    }
+    // We get here if it is not the 1st mouse click.
+    const [x2,y2] = [mX,mY]; // Set point (x2,y2).
+    const [dx,dy] = [x2-x1,y2-y1]; // Calculate differences.
+    const steps = Math.max(Math.abs(dx),Math.abs(dy)); // Calculate number of steps needed.
+    const [xIncrement,yIncrement] = [dx/steps,dy/steps]; // Calculate increment in x & y for each step.
+    ctx.fillStyle = `hsl(${360*Math.random()},100%,50%)`; // Random HSL color.
+    for(let i = 0; i <= steps; i++){ // Loot from 0 to 'steps'.
+        ctx.fillRect(x1,y1,2,2); // Draw point.
+        x1 += xIncrement; // Increment horizontal coordinate.
+        y1 += yIncrement; // Increment vertical coordinante.
+    }
+}
+
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // Event fires when page is loaded.
+    [canvasElem.width,canvasElem.height] = [contElem.offsetWidth,contElem.offsetHeight]; // Set canvas dimensions.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
