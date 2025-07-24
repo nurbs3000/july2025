@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Langton's Atn</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. Selects all elements. */
+                margin: 0; /* Removes default margins. */
+                padding: 0; /* Removes default paddings. */
+                box-sizing: border-box; /* Include padding and border in element's total width and height. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexible layout box model. */
+                flex-direction: column; /* Stack children vertically. */
+            }
+            header{ /* Type selector. */
+                width: 100%; /* Full width of the parent. */
+                height: 70px; /* Fixed height. */
+                background-color: brown; /* your choice. */
+                display: flex; /* Flexible layout box model. */
+                justify-content: space-evenly; /* items have equal space around them along main axis. */
+                align-items: center; /* center on cross axis. */
+                font: 20px Arial; 
+            }
+            figure{ /* Type selector. */
+                width: 100%; /* Full width of the parent. */
+                height: 100%; /* All remaining free height (100vh-70px). */
+                background-color: firebrick;   
+                position: relative; /* for absolute positioning of canvas. */
+                display: grid; /* only to center canvas usint place-items. */
+                place-items: center; /* center child vertically and horizontaly. */
+            }
+            canvas{ /* Type selector. */
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <header> <!-- Control panel with ineractive elements. -->
+                <div style="min-width:80px;">Cell: <span class="cell-size"></span>px<br>
+                    <input type="number" class="cell-size" min="10" max="50" value = "45">
+                </div>
+                <div>Grid<br>
+                    <input type="checkbox" class="show-grid" checked autocomplete="off" style="width:22px;height:22px;">
+                </div>
+                <div>Ants Qt:<span class="ants-qt"></span><br>
+                    <input type="number" class="ants-qt" min="1" max="3" value="1" autocomplete="off"></span>
+                </div>
+                <div>Cycle time:<span class="cycle-time"></span>ms<br>
+                    <input type="range" class="cycle-time" min="1" max="1000" value="700" autocomplete="off">
+                </div>
+                <div>Cycle:<br>
+                    <span id ="cycle" style="min-width:80px;">0</span>
+                </div>
+                <button id="start" style="min-width:60px;">Start</button>
+            </header>
+            <figure> <!-- Semantic element. Contains canvas. -->
+                <canvas></canvas> <!-- Drawing surface for simulation. -->
+            </figure>
+        </div>
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIABLES **********************
+const wrapperElem = document.querySelector('#wrapper'); // DOM elements references. 
+const headerElem = document.querySelector('header');
+const figureElem = document.querySelector('figure');
+const canvasElem = document.querySelector('canvas');
+const ctx = canvasElem.getContext('2d'); // Canvas 2D rendering context.
+const π = Math.PI; // Pi constant shorhand. Alt code 227.
+let cells; // 2D array representing grid cells (false=white, true=black).
+const ants = [];    // Array containg ant objects.
+let cellSize;       // Size of each cell in pixels.
+let rowQt, colQt;   // Number of rows and columns.
+let requestId;      // id for animation frame request.
+let lastTime;       // Timestamp tracker for animation.
+let cycleTime;      // Milliseconds between updates.
+let elapsedTime = 0;// Accumulated time since last updata.
+cycle = 0;          // Cycle (step) counter.
+//*************************** EVENTS ********************************
+headerElem.addEventListener('input',inputHandler); // One handler function for all control elements.
+document.querySelector('#start').addEventListener('click',inputHandler); // Start button click event.
+
+//*************************** LOGIC *********************************
+function initializeAll(e = undefined){ // Initializes or resets the entire animation. Accept optional event object 'e'.
+    // Get current cycle time (time between updates) and display it.
+    cycleTime = Number(headerElem.querySelector('input.cycle-time').value);
+    headerElem.querySelector('span.cycle-time').textContent = cycleTime;
+    if(e?.target?.className === 'cycle-time') return; // Skip full reset if only cycle time was adjusted.
+    if(requestId) cancelAnimationFrame(requestId); // Cancle running animation.
+    cycle = 0; // Reset number of cycle.
+    cellSize = Number(headerElem.querySelector('input.cell-size').value); // Get cell size.
+    cellSize = Math.max(10,cellSize); // Enforce minimum cell size.
+    headerElem.querySelector('span.cell-size').textContent = cellSize; // Display cell size.
+    let antsQt = Number(headerElem.querySelector('input.ants-qt').value); // Get number of ants (if you enter more then 1, the result is unpredicatable).
+    [rowQt,colQt] = [figureElem.offsetHeight/cellSize | 0, figureElem.offsetWidth/cellSize | 0]; // Calculate grid dimensions based on viewport size. | 0 is fast floor.
+    [canvasElem.width,canvasElem.height] = [colQt*cellSize,rowQt*cellSize]; // Set canvas dimensions (px).
+    cells = Array.from({length: rowQt}, ()=> // Initialise 2D cells array. All cells start false/white.
+        Array.from({length: colQt}), ()=>false
+    );
+    ants.length = 0; // Clear ants array.
+    while(antsQt){ // Initialize ants array.
+        ants.push({
+            // Center 1st ant, random others. ~~ is fast floor.
+            c: !ants.length ? ~~(colQt/2) : ~~(colQt*Math.random()), 
+            r: !ants.length ? ~~(rowQt/2) : ~~(rowQt*Math.random()),
+            rotation: 0, // Initial move direction in degrees (0=right, 90=down, 180=left, 270=up).
+        });
+        antsQt--; // Decrease counter (number of ants).
+    }
+    renderCells(); // Initial cells render.
+    renderAnts(0); // Initial ants render. Pass argument 0 - animation stand still.
+}
+function renderCells(){ // Draw cells on canvas.
+    const [W,H] = [canvasElem.width,canvasElem.height]; // Destructuring syntax. References for convenience.
+    ctx.clearRect(0,0,W,H); // Clera canvas.
+    for(let r = 0; r < rowQt; r++) // Iterate over each cell, and draw it.
+        for(let c = 0; c < colQt; c++){
+            ctx.fillStyle = cells[r][c] ? 'darkSlateGray' : 'lightBlue';
+            ctx.fillRect(c*cellSize,r*cellSize,cellSize,cellSize);
+        }
+    if(headerElem.querySelector('input.show-grid').checked){ // Draw grid lines if chechbox is checked.
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 1;
+        for(let x = cellSize; x < W; x += cellSize){ // Vertical lines.
+            ctx.beginPath();
+            ctx.moveTo(x,0);
+            ctx.lineTo(x,H);
+            ctx.stroke();
+        }
+        for(let y = cellSize; y < H; y += cellSize){ // Horizontal lines.
+            ctx.beginPath();
+            ctx.moveTo(0,y);
+            ctx.lineTo(W,y);
+            ctx.stroke();
+        }
+    }
+}
+function renderAnts(t){ // Renders ants movement animation. 't' time elaples since last update.
+    const fSize = cellSize*.6; // Emoji 'representing' ant size.
+    ants.forEach(ant=>{
+        let [x, y] = [ant.c*cellSize+cellSize/2, ant.r*cellSize+cellSize/2]; // Destructuring syntax. Calculat base position (center of cell).
+        // Apply movement interpolaton based on time 't', cellSize, cycle time, and movement direction.
+        const dist = cellSize*t/cycleTime;
+        switch(ant.rotation){
+            case 0: x += dist; break;
+            case 90: y += dist; break;
+            case 180: x -= dist; break;
+            case 270: y -= dist; break;
+        }
+        // Draw rotated ant.
+        ctx.save(); // Save drawing state.
+        ctx.translate(x,y); // Moves the drawing origin (0,0 point) to the ant's current position (x,y).
+        ctx.rotate(ant.rotation*π/180+π/2); // +π/2 since by defalt emoji(and all character) are as if -π/2 rotated relative to ant's zero rotation angle.
+        ctx.font=`${fSize}px Arial`;
+        ctx.fillText("🐞",-fSize*.66,fSize*.34); // Draw emoji, correcting its position to center it within a cell.
+        ctx.restore(); // Restores the drawing state.
+    });
+}
+function update(){ // Update simulation state (ant position and cell colors).
+    ants.forEach(ant=>{
+        switch(ant.rotation){ // Move ant with wrapping around edges. Ternary operator implemented.
+            case 0: ant.c = ant.c === colQt-1 ? 0 : ant.c+1; break;
+            case 90: ant.r = ant.r === rowQt-1 ? 0 : ant.r+1; break;
+            case 180: ant.c = ant.c === 0 ? colQt-1 : ant.c-1; break;
+            case 270: ant.r = ant.r === 0 ? rowQt-1 : ant.r-1; break
+        }
+        if(cells[ant.r][ant.c]){
+            ant.rotation -= 90; // White cell(true) turn left.
+        }else{
+            ant.rotation += 90; // Black cell(false) turn right.
+        }
+        ant.rotation = (ant.rotation+360)%360; // Normalize to 0-360 range.
+        cells[ant.r][ant.c] = !cells[ant.r][ant.c]; // Flip cell color.
+    });
+    headerElem.querySelector('#cycle').textContent = cycle++; // Display and update cycle counter.
+}
+function inputHandler(e){ // Handles control panel events. 'e' - triggering event's object.
+    if(e.target.className === 'show-grid') return; // Skip grid toggle (handled in renderCells).
+    if(e.target.id === 'start'){ // Start button pressed.
+        requestId = requestAnimationFrame(animate); // Start animation.
+        return;
+    }
+    initializeAll(e); // Parameter changed - reset animation.
+}
+function animate(timestamp){ // Animation loop (called recursively via requestAnimationFrame). 
+    if(!lastTime) lastTime = timestamp; // Handles first frame.
+    elapsedTime += timestamp-lastTime; // Update elapsed time.
+    lastTime = timestamp; // Update lastTime.
+    if(elapsedTime >= cycleTime){ // Update simulation at cycleTime intervals.
+        elapsedTime = 0; // Reset elapset time.
+        update(); // Update simulation state.
+    }
+    renderCells();
+    renderAnts(elapsedTime); // elapsedTime passed to calculate the ant's position while he smoothly travel between cells.
+    requestId = requestAnimationFrame(animate) // Continue animation loop.
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // Start simulation when page is loaded.
+    initializeAll();
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
