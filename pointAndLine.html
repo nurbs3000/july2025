@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Point and Line</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Removed default padding. */
+                box-sizing: border-box; /* Include border and padding in elements total width and height. */
+            }
+            figure{ /* Type selector. Semantic HTML element. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                background: #111; /* Dark background. */
+                position: relative; /* For absolute positioning of children. */
+            }
+            canvas{
+                position: absolute; /* Positioned relative to figure. */
+            }
+        </style>
+    </head>
+    <body>
+        <figure> <!-- Contains the canvas. -->
+            <canvas></canvas>
+        </figure>
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIBLES ***********************
+const figureElem = document.querySelector('figure'); // Reference to figure.
+const canvasElem = document.querySelector('canvas'); // Reference to canvas.
+const ctx = canvasElem.getContext('2d'); // 2D rendering context.
+const π = Math.PI; // Shortcut for PI. alt code 227.
+const points = []; // Array to store all moving points.
+const POINTS_QT = 300; // Number of points to create.
+const twoPoints = []; // Array for two points defining the line (control points).
+
+//*************************** EVENTS ********************************
+figureElem.addEventListener('mousedown',handleTwoPoints); // 3 mouse events required to implement drag-and-drop functionality.
+figureElem.addEventListener('mouseup',handleTwoPoints);
+figureElem.addEventListener('mousemove',handleTwoPoints);
+
+//*************************** LOGIC *********************************
+class Point{ // Class for creating point instances.
+    constructor(){ 
+        const {width:W, height:H} = canvasElem; // Destructuring syntax with alias. For convenience.
+        this.size = W/90 | 0; // Size relative to canvas width. | 0 is fast floor.
+        this.x = W*Math.random(); // Random x position.
+        this.y = H*Math.random(); // Random y position.
+        this.xVel = (Math.random()-.5)*.2; // Random x velocity (px/per frame). Hardware dependent (monitor refresh rate).
+        this.yVel = (Math.random()-.5)*.2; // Random y velocity.
+        this.color = 'white'; // Default color.
+    }
+    update(){ // Move point and assign color.
+        const {width:W, height:H} = canvasElem; // Shortcuts for convenience.
+        this.x += this.xVel; // Update positions.
+        this.y += this.yVel;
+        if(this.x < 0) this.x = W; // Wrapp around edges of canvas.
+        if(this.x > W) this.x = 0;
+        if(this.y < 0) this.y = H;
+        if(this.y > H) this.y = 0;
+        // Imlement the signed distance formula D = (y - y₁)(x₂ - x₁) - (x - x₁)(y₂ - y₁) ! This is MAIN topic of program.
+        const D = (twoPoints[1].y-twoPoints[0].y)*(this.x-twoPoints[0].x)-(twoPoints[1].x-twoPoints[0].x)*(this.y-twoPoints[0].y); // Calculate which side of the line the point is on using signed distance formula.
+        if(D < 0) this.color = 'red'; else this.color = 'blue'; // Set color based on side.
+    }
+    render(){ // Draw the point as a circle.
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x,this.y,this.size,0,2*π)
+        ctx.fill();
+    }
+}
+function handleTwoPoints(e){ // Handle mouse, implement drag and drop functionality for control points.
+    const [mX,mY] = [e.clientX,e.clientY]; // Destructruing syntax. Get current mouse coordinates.
+    const idx = twoPoints.findIndex(p=>p.isDragged); // Check is one of 2 points is dragged. Get index of the dragged point. -1 if no point dragged.
+    switch(e.type){ // For each event respective case.
+        case 'mousedown':
+            e.preventDefault(); // Prevent default browser behavior.
+            twoPoints.forEach(p=>{ // Iterater over two control points.
+                if(Math.hypot(p.x-mX,p.y-mY) < p.size){ // Check if mouse is over either control point.
+                    p.isDragged = true; // Mark as being dragged.
+                    [p.initialX,p.initialY] = [p.x,p.y]; // Store current position. Required for drag-and-drop calculation.
+                    [p.initial_mX,p.initial_mY] = [mX,mY]; // Store current mouse position. Required for drag-and-drom calculation.
+                }
+            });
+            break;
+        case 'mouseup':
+            if(idx >= 0) twoPoints[idx].isDragged = false; // If the point is dragged, release it. (idx !== -1)
+            break;
+        case 'mousemove':
+            if(idx < 0) break; // If no point currently dragged exit. (idx === -1).
+            const p = twoPoints[idx]; // Shorcut for convenience.
+            const [dX,dY] = [mX-p.initial_mX,mY-p.initial_mY]; // Calculate mouse movement since drag started.
+            [p.x,p.y] = [p.initialX+dX,p.initialY+dY]; // Update point position based on mouse movement.
+            break;
+    }
+}
+function animate(){ // Main animation loop.
+    ctx.clearRect(0,0,canvasElem.width,canvasElem.height); // Clear the canvas.
+    points.forEach(p=>{ // Update and render all points.
+        p.update();
+        p.render();
+    });
+    ctx.beginPath(); // Draw the line between two control points.
+    ctx.moveTo(twoPoints[0].x,twoPoints[0].y); // Start at first point.
+    ctx.lineTo(twoPoints[1].x,twoPoints[1].y); // Line to second point.
+    ctx.strokeStyle = 'aqua'; // Line color.
+    ctx.lineWidth = twoPoints[0].size/2; // Line thickness.
+    ctx.stroke(); // Draw the line.
+    ctx.font = `${twoPoints[0].size*1.7}px Arial`; // Set font size.
+    twoPoints.forEach((p,i)=>{ // Iterate over two control points.
+        points[0].render.call(p); // Borrow the draw point method from point to draw the control point.
+        ctx.fillStyle = 'black'; // Label color.
+        ctx.fillText(i,p.x-p.size/2,p.y+p.size/1.7); // Draw text (control point index).
+    });
+    requestAnimationFrame(animate); // Continue animation loop.
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // When page loads.
+    [canvasElem.width,canvasElem.height] = [figureElem.offsetWidth,figureElem.offsetHeight]; // Destructuring syntax. Set canvas size.
+    const {width:W, height:H} = canvasElem; // Shortcuts for canvas width and height for convenience.
+    for(let i = 0; i < POINTS_QT; i++) // Create moving points.
+        points.push(new Point()); // Push created instance of Point class in array.
+    const size = W/70; // Control point size.
+    twoPoints.push({x:W/2, y:3*size, size, color: 'aqua'}); // Top control point.
+    twoPoints.push({x:W/2, y:H-3*size, size, color: 'aqua'}); // Bottom control point.
+    requestAnimationFrame(animate); // Start animation loop.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html> 
