@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Create Labirynth. DFS</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Removes default margin. */
+                padding: 0; /* Removes default padding. */
+                box-sizing: border-box; /* Includes padding and border in elment't total width and height. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexbox layout. */
+                flex-direction: column; /* Vertical stacking. */
+                overflow: hidden; /* Hides overflow content. */
+            }
+            header{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 70px; /* Fixed height. */
+                background-color: tan; /* your choice. */
+                display: flex; /* Flexbox layout. */
+                justify-content: space-evenly; /* Even space distribution. */
+                align-items: center; /* Vertical centering. */
+                font: 18px Arial; /* Font settings. */
+            }
+            #container{ /* id selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: calc(100vh - 70px); /* Viewport height minus header. */
+                background: peru; /* your choice. */
+                display: grid; /* Grid layout, only to center main. */
+                place-items: center; /* Center content (main). */
+            }
+            main{ /* Type selector. */
+                display: flex; /* Flexbox layout. */
+                flex-wrap: wrap; /* Alows wrapping. When row will be filled, must go on next row below. */
+                background: maroon; /* your choice. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-lever container, wrapps everything. -->
+            <header> <!-- Contains controls, and display info. -->
+                <div style="min-width:20vw;">Current cell.<br>
+                    row: <span id="curr-row"></span> col: <span id="curr-col"></span>
+                </div>
+                <div>Cell size:
+                    <span class="cell-size"></span><br>
+                    <input type="range" class="cell-size" min="10" max="90" value="20" autocomplete="off" style="min-width:25vw;">
+                </div>
+                <div>Step time: <span class="step-time"></span>ms<br>
+                    <input type="range" class="step-time" min="0" max="999" value="100" autocomplete="off" style="min-width:25vw;">
+                </div>
+                <button id="btn-start" style="min-width:15vw;font:20px Arial">Start</button>
+            </header>
+            <div id="container"> <!-- Maze container. -->
+                <main></main> <!-- Created divs (representing maze cells) will be put here. -->
+            </div>
+        </div>
+        <script>
+//*************************** GLOBAL VARIABLES **********************
+const headerElem = document.querySelector('header'); // References to DOM elements for convenience.
+const contElem = document.querySelector('#container');
+const mainElem = document.querySelector('main');
+const cellSizeInfoElem = document.querySelector('span.cell-size');
+const cellSizeElem = document.querySelector('input.cell-size');
+const stepTimeInfoElem = document.querySelector('span.step-time');
+const stepTimeElem = document.querySelector('input.step-time');
+const WALL_COLOR = 'black', ROAD_COLOR = 'white'; // Color constants.
+const ENTRY_R = 0, ENTRY_C = 0; // Starting position (row 0, column 0).
+let cellSize, rowQt, colQt; // Maze dimensions variables.
+let currR, currC; // Current cell position.
+let intervalId, stepTime; // Animation control variables.
+//*************************** EVENTS ********************************
+headerElem.addEventListener('change',handleControls); // Listen for control changes.
+document.querySelector('button').addEventListener('click',handleControls); // Listens for button click.
+//*************************** LOGIC *********************************
+function handleControls(e = undefined){ // Handles all control inputs.
+    clearInterval(intervalId); // Stops any running animation.
+    cellSize = Number(cellSizeElem.value); // Gets current cellSize.
+    cellSizeInfoElem.textContent = `${cellSize}px x ${cellSize}px`; // Update cell size display.
+    stepTime = Number(stepTimeElem.value); // Gets current step time (interval).
+    stepTimeInfoElem.textContent = stepTime; // Update step time display.
+    if(e?.target?.id === 'btn-start') { // If start button was clicked.
+        [currR,currC] = [ENTRY_R,ENTRY_C]; // Resets to starting position.
+        intervalId = setInterval(depthFirstSearch, stepTime); // Starts maze generation.
+    }
+    initLabyrinth(); // (Re)initialize maze grid.
+}
+function initLabyrinth(){ // Creates initial maze grid.
+    [rowQt,colQt] = [contElem.offsetHeight/cellSize | 0,contElem.offsetWidth/cellSize | 0]; // Destructuring syntax. Calculate grid dimensions. | 0 is fast floor.
+    mainElem.style = `width:${colQt*cellSize}px;height:${rowQt*cellSize}px;`;
+    mainElem.innerHTML = ''; // Clears previous grid.
+    for(let r = 0; r < rowQt; r++) // Loops through rows.
+        for(let c = 0; c < colQt; c++){ // Loops through columns.
+            const el = document.createElement('div'); // Creates cell element.
+            el.style = `width:${cellSize}px; height:${cellSize}px; background-color:${WALL_COLOR}; border-width: ${cellSize/4 | 0}px; border-color:${WALL_COLOR}; border-style:solid;`; // Cell styling.
+            el.id = `r${r}c${c}`; // Unique cell ID. Cells row and column are encoded in ID.
+            el.dataset.visited = ''; // Visited flag.
+            el.dataset.previous = ''; // Previous cell(from where we get to this cell) referece.
+            mainElem.appendChild(el); // Adds cell to grid.
+        }
+}
+function depthFirstSearch(){ // Maze generation using DFS algorithm.
+    const directions = ['up','right','down','left']; // Possible directions.
+    const opposites = {up:'down', right:'left', down:'up', left:'right'}; // Opposite directions.
+    const moves = {up:{r:-1, c:0}, right:{r:0, c:1}, down:{r:1, c:0}, left:{r:0, c:-1}}; // Movement offsets (r - row, c - column).
+    displayCurrInfo(); // Updates curren position display.
+    let currCellElem = mainElem.querySelector(`#r${currR}c${currC}`); // Gets current cell element (row and column are encoded in every cell ID).
+    let isBacktracking = false; // Backtracking flag.
+    let currColor = 'lime'; // Default path color.
+    currCellElem.dataset.visited = 'y'; // Marks cell as visited.
+    currCellElem.style.backgroundColor = ROAD_COLOR; // Set cell color.
+    if(deadEnd()) isBacktracking = true; // If it is dead end, set backgracking flag.
+    if(isBacktracking){ // If backtracking.
+        currColor = 'red'; // Change color to red.
+        [currR,currC] = [...currCellElem.dataset.previous.match(/\d+/g).map(v=>parseInt(v))]; // Destructuring syntax. Moves to previous cell. Use map() to convert from strings to integers, ... is spread operator.  
+        if(currR === ENTRY_R && currC === ENTRY_C){ // If current position is starting position (means maze is finished).
+            clearInterval(intervalId); // Stop animation.
+            console.log('finished'); // Logs completion.
+            return; // Exit function.
+        }
+        isBacktracking = false; // Reset flag.
+    }else{ // If not backtracking.
+        let goto; // Direction variable.
+        do{goto = directions[4*Math.random() | 0]} // Random direction.
+        while(isVisited(goto)); // Until unvisited direction found.
+        const previous = currCellElem.id; // Stores current position.
+        removeBorder(currCellElem,goto); // Removes wall in chosen direction.
+        currR += moves[goto].r; // Updates row position.
+        currC += moves[goto].c; // Updates column position.
+        currCellElem = mainElem.querySelector(`#r${currR}c${currC}`); // Get new cell.
+        currCellElem.dataset.previous = previous; // Stores backtrack path.
+        removeBorder(currCellElem,opposites[goto]); // Removes opposite wall.
+    }
+    currCellElem.style.backgroundColor = currColor; // Colors current cell.
+    setTimeout(roadCellColor,stepTime,currCellElem); // Shedules color reset.
+
+    function deadEnd(){ // Checks if all directions are blocked.
+        return directions.every(dir=>isVisited(dir)); // True if all directions are visited.
+    }
+    function isVisited(direction){ // Checks if neighbor to the 'direction' was visited.
+        const neighborR = currR+moves[direction].r; // Neighbor row.
+        const neighborC = currC+moves[direction].c; // Neighbor column.
+        if(neighborR < 0 || neighborR === rowQt || neighborC < 0 || neighborC === colQt) return true; // Boundary check.
+        const neighborElem = mainElem.querySelector(`#r${neighborR}c${neighborC}`); // Gets neighbor element.
+        return neighborElem.dataset.visited ? true : false; // Returns visited status.
+    }
+    function removeBorder(elem,side){ // Remove cell wall/border.
+        const propertyNames = {up:'borderTopStyle',right:'borderRightStyle',down:'borderBottomStyle',left:'borderLeftStyle'}; // CSS property map.
+        elem.style[propertyNames[side]] = 'none'; // Hides the border.
+    }
+    function roadCellColor(elem){ // Resets cell to road color.
+        elem.style.backgroundColor = ROAD_COLOR; // Sets to white.
+    }
+    function displayCurrInfo(){ // Updates position display.
+        headerElem.querySelector('#curr-row').textContent = currR; // Updates row dispaly.
+        headerElem.querySelector('#curr-col').textContent = currC; // Updates column display.
+    }
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // Runs when page loads.
+    handleControls(); // Read controls initial values.
+    initLabyrinth(); // Creates initial grid.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
