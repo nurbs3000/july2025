@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Simulation</title>
+    <style> /* Internal CSS styling. */
+        *{ /* Universal selector. */
+            margin: 0; /* Removes default margin. */
+            padding: 0; /* Removes default margin. */
+            box-sizing: border-box; /* Includes padding and border in element's total widht and height. */
+        }
+        #wrapper{ /* id selector. */
+            width: 100vw; /* 100% of the viewport's width. */
+            height: 100vh; /* 100% of the viewport's height. */
+            display: flex; /* Flexbox model. */
+            flex-direction: column; /* Vertical stacking. */
+            overflow: hidden; /* Hides overflow content, no scollbars. */
+        }
+        header{ /* Type selector. */
+            width: 100%; /* 100% of the parent's width. */
+            height: 70px; /* Fixed height. */
+            background: skyBlue; /* your choice. */
+            display: flex; /* Flexbox layout. */
+            justify-content: space-evenly; /* Even space distribution. */
+            align-items: center; /* Vertical centering. */
+            font: 2vw Arial; /* Font settings. */
+        }
+        figure{ /* Type selector. */
+            width: 100%; /* 100% of the parent's width. */
+            height: 100%; /* All remaining free height 100vh - 70px(header). */
+            background: #111; /* your choice. */
+            position: relative; /* For absolute positioning of canvas. */
+        }
+        canvas{ /* Type selelctor. */
+            position: absolute;
+        }
+    </style>
+        </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <header> <!-- Semantic element. Contains controls. -->
+                <div>
+                    <input type="number" id="particlesQt" min="100" max="2000" value="800" autocomplete="off"> ParticlesQt<br>
+                    <input type="number" id="ptcRadius" min="3" max="30" value="10" autocomplete="off"> ptcRadius
+                </div>
+                <div>
+                    <input type="number" id="interactionRadius" min="5" max="40" value="20" autocomplete="off"> interactionRadius<br>
+                    <input type="number" id="pressureStrength" min="0" max="1" value="0.2" step="0.02" autocomplete="off"> pressurStrength
+                </div>
+                <div>
+                    <input type="number" id="targetDensity" min="1" max="6" value="2" autocomplete="off"> targetDensity<br>
+                    <input type="number" id="viscosityStrength" min= "0" max="1" value="0.05" step="0.01" autocomplete="off"> viscosityStrength
+                </div>
+                <button style="min-width:9vw;">Simulate</button> <!-- Reset simulation without reseting controls. -->
+            </header>
+        <figure> <!-- Semantic HTML element. Canvas container. -->
+            <canvas></canvas>
+        </figure>
+        </div>
+    <script> // Embedded JavaScript. 
+//*************************** GLOBAL VARIABLES **********************
+const wrapperElem = document.querySelector('#wrapper'); // References to DOM elements for convenience.
+const headerElem = document.querySelector('header');
+const figureElem = document.querySelector('figure');
+const canvasElem = document.querySelector('canvas');
+const ctx = canvasElem.getContext('2d'); // 2D rendering context.
+const π = Math.PI; // Shortcut for PI. π - alt code 227.
+let particlesQt;        // Number of particles.
+let interactionRadius;  // How far particles interact.
+let pressureStrength;   // Strength of pressure force (repulsion).
+let targetDensity;      // Ideal density particles try to achieve.
+let viscosityStrength;  // Resistance to flow.
+let ptcRadius;          // Visual radius of particles in pixels.
+let gravity = 0.1;      // Constant downward force.
+const particles = [];   // Array to store object representing particles.
+
+//*************************** EVENTS ********************************
+headerElem.addEventListener('input',handleControls); // Update parameters when any input element change value.
+document.querySelector('button').addEventListener('click',initParticles); // Reset simulation.
+
+//*************************** LOGIC *********************************
+class Particle { // Class for creating particle instances.
+    constructor(x,y,w,h) { // Accept top left corner coordinates, width, and height of the rectangle to generate particles within.
+        this.x = x+w*Math.random(); // Random x.
+        this.y = y+h*Math.random(); // Random y.
+        this.vx = (Math.random()-.5)*.1; // Small random initial velosity.
+        this.vy = (Math.random()-.5)*.1;
+        this.density = 0; // Initial density.
+        this.neighbors = []; // To strore particles within 'interactionRadius'.
+        this.color = 'orangeRed'; // Default color (never used).
+    }
+    calculateDensity() { // Simple density calculation based on nearby particles.
+        this.density = 0; // Reset density.
+        this.neighbors = []; // Clear neighbors list.
+        for (const p of particles) { // Loop through all particles.
+            if (p === this) continue; // Skip self.
+            const [dx,dy] = [p.x-this.x,p.y-this.y]; // Destructuring syntax.
+            const distance = Math.sqrt(dx*dx + dy*dy); // Distance to current 'p' particle.
+            if (distance < interactionRadius) { // If within ineraction radius.
+            this.density += (interactionRadius-distance)/interactionRadius; // Simple density contribution - closer particles contribute more.
+            this.neighbors.push(p); // Add to neighbors list.
+            }
+        }
+    } 
+    applyPressure() { // Apply pressure force based on density.
+        if (this.neighbors.length === 0) return; // Skip if no neighbors.
+        const densityDifference = this.density - targetDensity; // How much density differs from target.
+        const pressureForce = densityDifference * pressureStrength; // Determine pressure force.
+        for (const neighbor of this.neighbors) { // Loop through neighbors.
+            const [dx,dy] = [neighbor.x-this.x,neighbor.y-this.y]; // Destructuring syntax.
+            const distance = Math.sqrt(dx*dx + dy*dy) || 0.1; // Avoid division by zero.
+            const [nx,ny] = [dx/distance,dy/distance]; // Normalized direction vector.
+            const [fx,fy] = [nx*pressureForce,ny*pressureForce]; // Calculate force components.
+            // Apply equal and opposite forces (Newton's 3rd law).
+            this.vx -= fx;
+            this.vy -= fy;
+            neighbor.vx += fx;
+            neighbor.vy += fy;
+        }
+        // Apply viscosity (resistance to flow).
+        for (const neighbor of this.neighbors) { // Loop through neighbors. 
+        const [dvx,dvy] = [neighbor.vx-this.vx,neighbor.vy-this.vy];
+        neighbor.vx -= dvx * viscosityStrength;  
+        neighbor.vy -= dvy * viscosityStrength;
+        this.vx += dvx * viscosityStrength;
+        this.vy += dvy * viscosityStrength;
+    }
+    }
+    update() { // Update particle position.
+        this.vy += gravity; // Apply gravity.
+        this.x += this.vx; // Move horizontally.
+        this.y += this.vy; // Move vertically.
+        this.vx *= 0.99; // Apply damping (friction).
+        this.vy *= 0.99;
+    }
+    constrain(W,H,bounce = 0.8) { // Keep particles within bounds.
+        if (this.x < ptcRadius){this.x = ptcRadius; this.vx *= -bounce;}
+        if (this.x > W-ptcRadius){this.x = W-ptcRadius; this.vx *= -bounce;}
+        if (this.y < ptcRadius){this.y = ptcRadius; this.vy *= -bounce;}
+        if (this.y >H-ptcRadius){this.y = H-ptcRadius; this.vy *= -bounce;}
+    }
+    render() { // Draw particle on vanvas.
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, ptcRadius, 0, 2*π); // Draw circle.
+        const depth = this.y / canvasElem.height;
+        ctx.fillStyle = `hsl(${200+depth*40}, 80%, ${90-depth*40}%)`; // Color based on vertical position (depth).
+        ctx.fill();
+    }
+}
+function handleControls(){ // Handle control input changes.
+    ['particlesQt','ptcRadius','interactionRadius','pressureStrength','targetDensity','viscosityStrength'].forEach(id=>{ // forEach loop.
+        const value = Number(document.querySelector(`input#${id}`).value); // Get the value from current input element(convert from string to number).
+        eval(`${id} = ${value}`); // Not the best practice, but can save a lot of time.
+    });
+}
+function initParticles(){ // Reset and initialize particles.
+    const {width:W, height:H} = canvasElem; // Destructuring syntax with alias. Get canvas dimensions.
+    particles.length = 0; // Cleat existing particles.
+    for(let i = 0; i < particlesQt; i++) // For loop.
+    particles.push(new Particle(W/3,0,W/3,H)); // Create particle invoking class constructor and push it into array.
+}
+function animate() { // Main animation loop.
+    ctx.clearRect(0, 0, canvasElem.width, canvasElem.height); // Clear canvas.
+     particles.forEach(p=>p.calculateDensity()); // Calculate densities for all particles.
+    particles.forEach(p=>p.applyPressure()); // Applly pressure forces.
+    particles.forEach(p=>{ // Update and render all particles.
+        p.update(); // Update position.
+        p.constrain(canvasElem.width, canvasElem.height); // Handle boundaries.
+        p.render(); // Draw particle.
+    });
+    requestAnimationFrame(animate); // Continue animation loop.
+}
+
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // When page loads.
+    [canvasElem.width,canvasElem.height] = [figureElem.offsetWidth,figureElem.offsetHeight]; // Set canvas size to match container(figure).
+    handleControls(); // Set parameters.
+    initParticles(); // Create particles.
+    requestAnimationFrame(animate); // Start animation.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
