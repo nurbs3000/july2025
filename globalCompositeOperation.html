@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>globalCopmositeOperation</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Removes default margin. */
+                padding: 0; /* Removes default padding. */
+                box-sizing: border-box; /* Border/padding included in element's size. */
+            }
+            #wrapper{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                display: flex; /* Flexbox model. */
+                flex-direction: column; /* Vertical stacking. */
+                overflow: hidden; /* Hides overflow content, no scrollbars.*/
+            }
+            header{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 70px; /* Fixed height. */
+                background-color: darkSalmon; /* your choice. */
+                display: flex; /* Flexbox layout. */
+                justify-content: space-evenly; /* Even space distribution. */
+                align-items: center; /* Vertical centering. */
+                font: 2vw Arial; /* Responsive font size. */
+            }
+            figure{ /* Type selector. */
+                width: 100%; /* 100% of the parent's width. */
+                height: 100%; /* All remaining free height 100vh - 70px. */
+                background-color: ghostWhite; /* your choice. */
+                position: relative; /* For absolute positioning of canvas. */
+            }
+            canvas{ /* Type selector. */
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="wrapper"> <!-- Top-level container. Wrapps everything. -->
+            <header> <!-- HTML semantic element. Contains controls. -->
+                <div> <!-- Particle quantity control. -->
+                    Quantity: <span class="ptcl-qt"></span><br>
+                    <input type="range" class="ptcl-qt" min="2" max="50" value="10" step="2" autocomplete="off">
+                </div>
+                <div> <!-- Particle size control. -->
+                    Size: <span class="ptcl-size"></span> px<br>
+                    <input type="range" class="ptcl-size" min="10" max="300" value="70" autocomplete="off">
+                </div>
+                <div> <!-- Square/circle balance control. -->
+                    Balance: <span class="balance"></span><br>
+                    <input type="range" class="balance" min="0" max="100" value="50" autocomplete="off">
+                </div>
+                <!-- globalCompositeOperation mode selector. -->
+                <select class="gco-value" style="font:2vw Arial;">
+                    <!-- All availbable composite operations. -->
+                    <option value="source-over">source-over</option>
+                    <option value="source-atop">source-atop</option>
+                    <option value="source-in">source-in</option>
+                    <option value="source-out">source-out</option>
+                    <option value="destination-over">destination-over</option>
+                    <option value="destination-atop">destination-atop</option>
+                    <option value="destination-in">destination-in</option>
+                    <option value="destination-out">destination-out</option>
+                    <option value="lighter">lighter</option>
+                    <option value="copy">copy</option>
+                    <option value="xor">xor</option>
+                    <option value="multiply">multiply</option>
+                    <option value="screen">screen</option>
+                    <option value="overlay">overlay</option>
+                    <option value="lighten">lighten</option>
+                    <option value="color-dodge">color-dodge</option>
+                    <option value="color-burn">color-burn</option>
+                    <option value="hard-light">hard-light</option>
+                    <option value="soft-light">soft-light</option>
+                    <option value="difference">difference</option>
+                    <option value="exclusion">exclusion</option>
+                    <option value="hue">hue</option>
+                    <option value="saturation">saturation</option>
+                    <option value="color">color</option>
+                    <option value="luminosity">luminosity</option>
+                </select>
+                <div> <!-- Color scheme selector. -->
+                    <input type="radio" name="color-scheme" value="one-color" autocomplete="off"><label> One color</label><br>
+                    <input type="radio" name="color-scheme" value="two-color" autocomplete="off" checked><label> Two colors</label><br>
+                    <input type="radio" name="color-scheme" value="random-color" autocomplete="off"><label> Random colors</label>
+                </div>
+            </header>
+            <figure> <!-- Canvas container. -->
+                <canvas></canvas>
+            </figure>
+        </div>
+        <script>
+//*************************** GLOBAL VARIABLES **********************
+const headerElem = document.querySelector('header'); // References to DOM elements.
+const figureElem = document.querySelector('figure');
+const canvasElem = document.querySelector('canvas');
+const ctx = canvasElem.getContext('2d'); // 2D drawing context.
+const particles = []; // Array to store objects representing particles.
+const param = {}; // Object to store control parameters.
+let lastTime; // Timestamp tracker for animation.
+//*************************** EVENTS ********************************
+headerElem.addEventListener('change',handleControls); // Handle all control changes.
+//*************************** LOGIC *********************************
+class Particle{ // Class to create particle instances.
+    constructor(){
+        const {width:W, height:H} = canvasElem; // Destructuring syntax with alias. 
+        const size = param['ptcl-size']; // Shortcut for particle size.
+        this.x = size+Math.random()*(W-size); // Random x position.
+        this.y = size+Math.random()*(H-size); // Random y position.
+        this.xVel = (Math.random()-.5)*.07; // Random velosity.
+        this.yVel = (Math.random()-.5)*.07; // Small values for smooth movements.
+        this.color = `hsl(${360*Math.random() | 0},80%,50%)`; // Random HSL color (for random color scheme).
+    }
+    update(t){ // Update particle position based on velosity and frame time.
+        const {width:W, height:H} = canvasElem; // Destructuring syntax with alias.
+        const size = param['ptcl-size']; // Shortcut.
+        this.x += this.xVel*t; // Move particle.
+        this.y += this.yVel*t;
+        // Boundary collision detection and responce (bounce from edges).
+        if(this.x < size){this.x = size; this.xVel *= -1;};
+        if(this.x > W-size){this.x = W-size; this.xVel *= -1;};
+        if(this.y < size){this.y = size; this.yVel *= -1;};
+        if(this.y > H-size){this.y = H-size; this.yVel *= -1;};
+    }
+    render(idx){ // Draw particle on canvas. Accept particle index in particles array.
+        const size = param['ptcl-size']; // Shortcut for particle size.
+        ctx.beginPath();
+        const isSquare = idx/particles.length < param.balance/100; // Boolean flat. Determine if particle should be square or circle based on balance parameter.
+        switch(param['color-scheme']){ // Set fill color based on selected color scheme.
+            case 'one-color': ctx.fillStyle = 'darkSlateGray'; break;
+            case 'two-color': ctx.fillStyle = isSquare ? 'midnightBlue' : 'maroon'; break;
+            case 'random-color': ctx.fillStyle = this.color; break;
+        }
+        if(!isSquare) ctx.globalCompositeOperation = param['gco-value'];
+        else ctx.globalCompositeOperation = 'source-over'; // Apply either selected globalComposite operation for circles, or default 'source-over' for squares.
+        if(isSquare){ // Draw either square or circle.
+            ctx.fillRect(this.x-size,this.y-size,2*size,2*size);
+        }else{
+            ctx.arc(this.x,this.y,size,0,Math.PI*2);
+            ctx.fill();
+        }
+    }
+}
+function initParticles(){ // Create or remove particles based on curren quantity parameter.
+    while(particles.length < param['ptcl-qt']){ // Add particles.
+        particles.push(new Particle());
+    }
+    particles.length = param['ptcl-qt']; // Remove particles.
+}
+function handleControls(e){ // Update all parameter values from controls.
+    ['ptcl-qt','ptcl-size','balance'].forEach(str=>{
+        const value = Number(document.querySelector(`input.${str}`).value);
+        param[str] = value;
+        document.querySelector(`span.${str}`).textContent = value;
+    });
+    if(!e){ // Initial setup case (when no event).
+        param['gco-value'] = 'source-over';
+        param['color-scheme'] = 'two-color';
+        return;
+    }
+    if(e.target.type === 'select-one'){ // Handle composite operation selection.
+        param['gco-value'] = e.target.value;
+    }
+    if(e.target.type === 'radio'){ // Handle color scheme selection.
+        param['color-scheme'] = e.target.value;
+    }
+}
+function animate(timestamp){ // Main animation loop.
+    if(!lastTime) lastTime = timestamp; // Triggers on 1st frame.
+    const frameTime = timestamp-lastTime; // Calculate time since last frame.
+    lastTime = timestamp;
+    ctx.clearRect(0,0,canvasElem.width,canvasElem.height); // Clear canvas.
+    initParticles();
+    particles.forEach((ptcl,i)=>{ // Loop through each particle.
+        ptcl.update(frameTime); // Update position.
+        ptcl.render(i); // Draw particle.
+    });
+    requestAnimationFrame(animate); // Continue animation loop.
+}
+//*************************** INITIALIZATION ************************
+onload = ()=>{ // When page is loaded.
+    [canvasElem.width,canvasElem.height] = [figureElem.offsetWidth,figureElem.offsetHeight]; // Destructuring syntax. Set canvas size.
+    headerElem.querySelector('select').selectedIndex = 0; // Set default composite operation. It is easier to white 1 code line here, than 25 times type autocomplete="off" in HTML <select> element.
+    handleControls(); // Initialize parameters.
+    requestAnimationFrame(animate); // Start animation.
+}
+//*******************************************************************
+        </script>
+    </body>
+</html>
