@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Wrong way to pause</title>
+        <style> /* Internal CSS styling. */
+            *{ /* Universal selector. */
+                margin: 0; /* Remove default margin. */
+                padding: 0; /* Remove defalut padding. */
+                box-sizing: border-box; /* Border/padding included in element's size. */
+            }
+            #container{ /* id selector. */
+                width: 100vw; /* 100% of the viewport's width. */
+                height: 100vh; /* 100% of the viewport's height. */
+                background: darkSlateBlue; /* your choice. */
+                color: lavender; /* your choice. */
+                display: grid; /* Just to place-items to work. */
+                place-items: center; /* Center content vertically and horizontally. */
+                font-size: 30vw; /* Responsive font size. */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="container"></div> <!-- Display for timer. -->
+        <script> // Embedded JavaScript.
+//*************************** GLOBAL VARIABLES **********************
+const containerElem = document.querySelector('#container'); // Reference to DOM elements.
+//*************************** LOGIC *********************************
+function calibrate() { // Measure how many times Math.sin function can be performed in 1 milliseconds (hardware dependent).
+    const start = performance.now(); // perfomance.now() returns a high-resolution timestamp is ms since the start of document navaigation. Capture precise start time.
+    let iterations = 0; // Increment for each completed operation.
+    while (performance.now()-start < 5) { // Run loop for exactly 5ms to measure CPU speed.
+        Math.sin(Math.PI/7); // Benchmark operation (can be any other functions).
+        iterations++; // Increment calibration counter after each Math.sin() execution.
+    }
+    return Math.floor(iterations/5); // Return iterations per millisecond (averaged over 5ms).
+}
+function timer(){ // Executes batches of calculation and updates counter.
+    const batchSize  = iterationsPerSecond/60; // Split work into 60 batches per second (targeting 60fps).
+    for (let i = 0; i < batchSize; i++) { // Execute one batch of calculations.
+        Math.sin(Math.PI/7); // The work being timed.
+        iterationsDone++; // Track total operations.
+    }
+    if(iterationsDone >= iterationsPerSecond*(count+1)){ // Check if we've accumulated 1 second's worth of work. 
+        containerElem.textContent = ++count; // Update UI.
+    }
+    if(count < 100){ // Continue if not done.
+        setTimeout(timer,0); // setTimeout(0) yield to browser's event loop. Not actually 0ms delay. Minimum delay is ~4ms in modern browsers. Allows UI updates between batches.
+    }
+}
+//*************************** INITIALIZATION ************************
+const iterationsPerSecond = 1000*calibrate(); // How many operations make up 1 second of work.
+console.log("iterationsPerSecong:",iterationsPerSecond); 
+let count  = 0; // Track seconds elapsed.
+let iterationsDone = 0; // Track total operations completed.
+timer(); // Start the timer.
+//*******************************************************************
+        </script>
+    </body>
+</html>
